@@ -388,9 +388,7 @@ function build(){
     rMesh.castShadow=true;cooler.add(rMesh);
   }
 
-  // ── Walls: axis-aligned panels offset INWARD from outside face points ──
-  // fp[] = outside face. Panels are T thick, positioned T/2 inward from fp.
-  const edges=[];
+  // ── Walls: all panels full length, offset inward, overlapping at corners ──
   for(let i=0;i<fp.length;i++){
     const a=fp[i],b=fp[(i+1)%fp.length];
     const dx=b[0]-a[0],dz=b[1]-a[1];
@@ -398,61 +396,32 @@ function build(){
     if(len<.01)continue;
     const isHoriz=Math.abs(dx)>=Math.abs(dz);
     const [nx,nz]=edgeNormal(a,b);
-    edges.push({i,a,b,dx,dz,len,isHoriz,nx,nz});
-  }
-
-  edges.forEach(e=>{
-    const {a,b,dx,dz,len,isHoriz,nx,nz}=e;
-    // Inward offset: move panel center T/2 opposite to outward normal
-    const inX=-nx*T/2, inZ=-nz*T/2;
 
     if(isHoriz){
       const x1=Math.min(a[0],b[0]),x2=Math.max(a[0],b[0]);
       const panelW=x2-x1;
-      if(panelW<.01)return;
+      if(panelW<.01)continue;
       const midX=(x1+x2)/2;
-      const midZ=(a[1]+b[1])/2+inZ; // shifted inward
+      const midZ=(a[1]+b[1])/2 - nz*T/2;
       const wallGeo=new THREE.BoxGeometry(panelW,wallH,T);
       const wall=new THREE.Mesh(wallGeo,extMat);
       wall.position.set(midX,fTop+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
-      const eg=new THREE.EdgesGeometry(wallGeo);
-      const ln=new THREE.LineSegments(eg,edgeMat);
-      ln.position.copy(wall.position);cooler.add(ln);
+      const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
+      eg.position.copy(wall.position);cooler.add(eg);
     } else {
-      const z1=Math.min(a[1],b[1])+T/2;
-      const z2=Math.max(a[1],b[1])-T/2;
+      const z1=Math.min(a[1],b[1]),z2=Math.max(a[1],b[1]);
       const panelD=z2-z1;
-      if(panelD<.01)return;
+      if(panelD<.01)continue;
       const midZ=(z1+z2)/2;
-      const midX=(a[0]+b[0])/2+inX; // shifted inward
+      const midX=(a[0]+b[0])/2 - nx*T/2;
       const wallGeo=new THREE.BoxGeometry(T,wallH,panelD);
       const wall=new THREE.Mesh(wallGeo,extMat);
       wall.position.set(midX,fTop+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
-      const eg=new THREE.EdgesGeometry(wallGeo);
-      const ln=new THREE.LineSegments(eg,edgeMat);
-      ln.position.copy(wall.position);cooler.add(ln);
+      const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
+      eg.position.copy(wall.position);cooler.add(eg);
     }
-  });
-
-  // Corner posts at each vertex, shifted inward
-  for(let i=0;i<fp.length;i++){
-    const p=fp[i];
-    // Compute inward direction at this vertex (average of two adjacent edge inward normals)
-    const prev=fp[(i-1+fp.length)%fp.length],next=fp[(i+1)%fp.length];
-    const [n1x,n1z]=edgeNormal(prev,p);
-    const [n2x,n2z]=edgeNormal(p,next);
-    let bx=-(n1x+n2x)/2,bz=-(n1z+n2z)/2; // inward = negative outward
-    const bl=Math.sqrt(bx*bx+bz*bz)||1;
-    bx/=bl;bz/=bl;
-    const postGeo=new THREE.BoxGeometry(T,wallH,T);
-    const post=new THREE.Mesh(postGeo,extMat);
-    post.position.set(p[0]+bx*T/2,fTop+wallH/2,p[1]+bz*T/2);
-    post.castShadow=true;post.receiveShadow=true;cooler.add(post);
-    const peg=new THREE.EdgesGeometry(postGeo);
-    const pln=new THREE.LineSegments(peg,edgeMat);
-    pln.position.copy(post.position);cooler.add(pln);
   }
 
   // ── Find front wall: longest horizontal edge with outward normal facing +Z ──
@@ -531,11 +500,6 @@ function build(){
     lgSp.position.set(doorCX,fTop+dH*.63,hwZ+.04);cooler.add(lgSp);
   }
 
-  // Interior light
-  const liM=new THREE.MeshStandardMaterial({color:0xfff8e1,emissive:0xfff3c4,emissiveIntensity:.3});
-  const liMe=new THREE.Mesh(new THREE.BoxGeometry(W*.3,.04,.08),liM);
-  liMe.position.set(0,fTop+wallH-T*.3,0);cooler.add(liMe);
-
   // ── Dimension lines: outside face measurements (fp = outside face points) ──
   const dOff=.3,oy=fTop+wallH+dOff;
   for(let i=0;i<fp.length;i++){
@@ -552,9 +516,9 @@ function build(){
       fmtIn(edgeLen),new THREE.Vector3(nx*.12,.15,nz*.12),.7
     );
   }
-  // Height at first outside corner
+  // Height at first outside corner, pushed outward
   const hc=fp[0];
-  addDim(new THREE.Vector3(hc[0]+.25,fTop,hc[1]+.25),new THREE.Vector3(hc[0]+.25,fTop+wallH,hc[1]+.25),fmtIn(S.height),new THREE.Vector3(.2,0,.2));
+  addDim(new THREE.Vector3(hc[0]+.5,fTop,hc[1]+.5),new THREE.Vector3(hc[0]+.5,fTop+wallH,hc[1]+.5),fmtIn(S.height),new THREE.Vector3(.3,0,.3));
 }
 
 function updateMat(){
