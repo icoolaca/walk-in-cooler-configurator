@@ -49,7 +49,7 @@
 
   .panel-section{padding:20px 24px;border-bottom:1px solid var(--border);animation:fadeInUp .4s ease both}
   .panel-page{display:none}
-  .panel-page.active{display:contents}
+  .panel-page.active{display:block}
   .panel-placeholder{padding:40px 24px;text-align:center;color:var(--text-light);font-size:13px;font-weight:500;line-height:1.6}
   .panel-section:nth-child(2){animation-delay:.05s}.panel-section:nth-child(3){animation-delay:.1s}.panel-section:nth-child(4){animation-delay:.15s}.panel-section:nth-child(5){animation-delay:.2s}.panel-section:nth-child(6){animation-delay:.25s}.panel-section:nth-child(7){animation-delay:.3s}.panel-section:nth-child(8){animation-delay:.35s}
   @keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -128,23 +128,23 @@
 <body>
 
 <nav class="top-nav" id="top-nav">
-  <!-- Indoor tabs (shown when Indoor Walk-In selected) -->
+  <!-- Indoor tabs -->
   <button class="nav-tab indoor-tab active" data-tab="setup">Walk-In Setup</button>
   <button class="nav-tab indoor-tab" data-tab="shape">Compartment 1 Shape</button>
   <button class="nav-tab indoor-tab" data-tab="exterior">Compartment 1 Exterior</button>
   <button class="nav-tab indoor-tab" data-tab="interior">Compartment 1 Interior</button>
   <button class="nav-tab indoor-tab" data-tab="door">Compartment 1 Door Options</button>
+  <button class="nav-tab indoor-tab" data-tab="blast">Compartment 1 Blast Chiller Options</button>
+  <button class="nav-tab indoor-tab" data-tab="glass">Compartment 1 Glass Display Doors Options</button>
   <button class="nav-tab indoor-tab" data-tab="dims">Show Dimensions</button>
-  <!-- Outdoor tabs (shown when Outdoor Walk-In selected) -->
+  <button class="nav-tab indoor-tab" data-tab="room">Room Setup</button>
+  <!-- Outdoor tabs -->
   <button class="nav-tab outdoor-tab" data-tab="setup" style="display:none">Walk-In Setup</button>
   <button class="nav-tab outdoor-tab" data-tab="shape" style="display:none">Compartment 1 Shape</button>
   <button class="nav-tab outdoor-tab" data-tab="exterior" style="display:none">Compartment 1 Exterior</button>
   <button class="nav-tab outdoor-tab" data-tab="interior" style="display:none">Compartment 1 Interior</button>
   <button class="nav-tab outdoor-tab" data-tab="door" style="display:none">Compartment 1 Door Options</button>
-  <button class="nav-tab outdoor-tab" data-tab="blast" style="display:none">Compartment 1 Blast Chiller Options</button>
-  <button class="nav-tab outdoor-tab" data-tab="glass" style="display:none">Compartment 1 Glass Display Doors Options</button>
   <button class="nav-tab outdoor-tab" data-tab="dims" style="display:none">Show Dimensions</button>
-  <button class="nav-tab outdoor-tab" data-tab="room" style="display:none">Room Setup</button>
 </nav>
 
 <div class="main-layout">
@@ -191,10 +191,7 @@
       <div class="panel-section"><div class="section-label">Add Floor in Compartment?</div><select class="custom-select" id="floor-select"><option value="standard">Standard Floor (600lbs per sq ft) NO ROLLING TRAFFIC</option><option value="heavy">Heavy-Duty Floor (1000lbs per sq ft)</option><option value="reinforced">Reinforced Floor - Forklift Rated</option><option value="none">No Floor (Existing Concrete)</option></select></div>
       <div class="panel-section"><div class="section-label">Compartment Ramp</div><div class="toggle-group"><button class="toggle-option active" data-val="interior" id="ramp-interior">Interior Ramp</button><button class="toggle-option" data-val="exterior" id="ramp-exterior">Exterior Ramp</button><button class="toggle-option" data-val="none" id="ramp-none">No Ramp</button></div></div>
       <div class="panel-section"><div class="section-label">Display Options</div>
-        <div class="check-row"><span class="check-label">Show Dimensions</span><div class="switch"><input type="checkbox" id="toggle-dims" checked><div class="switch-track"></div></div></div>
-        <div class="check-row"><span class="check-label">Wireframe Mode</span><div class="switch"><input type="checkbox" id="toggle-wireframe"><div class="switch-track"></div></div></div>
       </div>
-    </div>
     <!-- PAGE: Compartment 1 Shape -->
     <div class="panel-page" data-page="shape"><div class="panel-placeholder">Compartment Shape options will appear here.<br>Configure wall layout, L-shapes, and multi-zone compartments.</div></div>
     <!-- PAGE: Compartment 1 Exterior -->
@@ -203,14 +200,20 @@
     <div class="panel-page" data-page="interior"><div class="panel-placeholder">Interior options will appear here.<br>Configure shelving, wall finish, floor drains, and lighting.</div></div>
     <!-- PAGE: Compartment 1 Door Options -->
     <div class="panel-page" data-page="door"><div class="panel-placeholder">Door options will appear here.<br>Configure door type, swing direction, hardware, and glass doors.</div></div>
-    <!-- PAGE: Blast Chiller (outdoor only) -->
+    <!-- PAGE: Blast Chiller (indoor only) -->
     <div class="panel-page" data-page="blast"><div class="panel-placeholder">Blast Chiller options will appear here.<br>Configure rapid cooling cycles and blast chiller units.</div></div>
-    <!-- PAGE: Glass Display Doors (outdoor only) -->
+    <!-- PAGE: Glass Display Doors (indoor only) -->
     <div class="panel-page" data-page="glass"><div class="panel-placeholder">Glass Display Door options will appear here.<br>Configure glass door panels, lighting, and merchandising zones.</div></div>
     <!-- PAGE: Show Dimensions -->
     <div class="panel-page" data-page="dims"><div class="panel-placeholder">Dimension view active.<br>All measurements are displayed on the 3D model.</div></div>
     <!-- PAGE: Room Setup -->
     <div class="panel-page" data-page="room"><div class="panel-placeholder">Room Setup options will appear here.<br>Configure room dimensions, clearances, and installation constraints.</div></div>
+    <!-- Display Options (always visible, not inside a panel-page) -->
+    <div class="panel-section" style="margin-top:auto;border-top:1px solid var(--border);border-bottom:none">
+      <div class="section-label">Display Options</div>
+      <div class="check-row"><span class="check-label">Show Dimensions</span><div class="switch"><input type="checkbox" id="toggle-dims" checked><div class="switch-track"></div></div></div>
+      <div class="check-row"><span class="check-label">Wireframe Mode</span><div class="switch"><input type="checkbox" id="toggle-wireframe"><div class="switch-track"></div></div></div>
+    </div>
     <!-- Tab pagination nav (always visible) -->
     <div class="continue-row" id="panel-nav">
       <button class="btn-back" id="btn-back" style="display:none"><span class="arrow">&larr;</span> Back</button>
