@@ -216,6 +216,8 @@
 // ═══════════════════════════════════════════════════════
 // Shape definitions (2D top-view polygons in inches)
 // ═══════════════════════════════════════════════════════
+// Shape definitions: points define the OUTSIDE face of the compartment
+// All measurements are outer-to-outer dimensions
 const SHAPES = {
   "Rectangle":      [[0,0],[150,0],[150,150],[0,150]],
   "Cut-out A":      [[0,0],[150,0],[150,120],[120,120],[120,150],[0,150]],
@@ -386,9 +388,8 @@ function build(){
     rMesh.castShadow=true;cooler.add(rMesh);
   }
 
-  // ── Walls: axis-aligned panels with proper corner joints ──
-  // Classify each edge as horizontal (X-dominant) or vertical (Z-dominant)
-  // Horizontal panels run full length; vertical panels fit between them
+  // ── Walls: axis-aligned panels offset INWARD from outside face points ──
+  // fp[] = outside face. Panels are T thick, positioned T/2 inward from fp.
   const edges=[];
   for(let i=0;i<fp.length;i++){
     const a=fp[i],b=fp[(i+1)%fp.length];
@@ -396,26 +397,21 @@ function build(){
     const len=Math.sqrt(dx*dx+dz*dz);
     if(len<.01)continue;
     const isHoriz=Math.abs(dx)>=Math.abs(dz);
-    edges.push({i,a,b,dx,dz,len,isHoriz});
-  }
-
-  // Get outward normal direction for positioning
-  function getNormalDir(a,b){
     const [nx,nz]=edgeNormal(a,b);
-    return {nx,nz};
+    edges.push({i,a,b,dx,dz,len,isHoriz,nx,nz});
   }
 
   edges.forEach(e=>{
-    const {a,b,dx,dz,len,isHoriz}=e;
-    const {nx,nz}=getNormalDir(a,b);
+    const {a,b,dx,dz,len,isHoriz,nx,nz}=e;
+    // Inward offset: move panel center T/2 opposite to outward normal
+    const inX=-nx*T/2, inZ=-nz*T/2;
 
     if(isHoriz){
-      // Horizontal panel: runs along X, thickness in Z
       const x1=Math.min(a[0],b[0]),x2=Math.max(a[0],b[0]);
       const panelW=x2-x1;
       if(panelW<.01)return;
       const midX=(x1+x2)/2;
-      const midZ=(a[1]+b[1])/2;
+      const midZ=(a[1]+b[1])/2+inZ; // shifted inward
       const wallGeo=new THREE.BoxGeometry(panelW,wallH,T);
       const wall=new THREE.Mesh(wallGeo,extMat);
       wall.position.set(midX,fTop+wallH/2,midZ);
@@ -424,14 +420,12 @@ function build(){
       const ln=new THREE.LineSegments(eg,edgeMat);
       ln.position.copy(wall.position);cooler.add(ln);
     } else {
-      // Vertical panel: runs along Z, thickness in X
-      // Shorten by T at each end to fit between horizontal panels
       const z1=Math.min(a[1],b[1])+T/2;
       const z2=Math.max(a[1],b[1])-T/2;
       const panelD=z2-z1;
       if(panelD<.01)return;
       const midZ=(z1+z2)/2;
-      const midX=(a[0]+b[0])/2;
+      const midX=(a[0]+b[0])/2+inX; // shifted inward
       const wallGeo=new THREE.BoxGeometry(T,wallH,panelD);
       const wall=new THREE.Mesh(wallGeo,extMat);
       wall.position.set(midX,fTop+wallH/2,midZ);
@@ -442,12 +436,19 @@ function build(){
     }
   });
 
-  // Corner posts at each vertex
+  // Corner posts at each vertex, shifted inward
   for(let i=0;i<fp.length;i++){
     const p=fp[i];
+    // Compute inward direction at this vertex (average of two adjacent edge inward normals)
+    const prev=fp[(i-1+fp.length)%fp.length],next=fp[(i+1)%fp.length];
+    const [n1x,n1z]=edgeNormal(prev,p);
+    const [n2x,n2z]=edgeNormal(p,next);
+    let bx=-(n1x+n2x)/2,bz=-(n1z+n2z)/2; // inward = negative outward
+    const bl=Math.sqrt(bx*bx+bz*bz)||1;
+    bx/=bl;bz/=bl;
     const postGeo=new THREE.BoxGeometry(T,wallH,T);
     const post=new THREE.Mesh(postGeo,extMat);
-    post.position.set(p[0],fTop+wallH/2,p[1]);
+    post.position.set(p[0]+bx*T/2,fTop+wallH/2,p[1]+bz*T/2);
     post.castShadow=true;post.receiveShadow=true;cooler.add(post);
     const peg=new THREE.EdgesGeometry(postGeo);
     const pln=new THREE.LineSegments(peg,edgeMat);
@@ -465,40 +466,41 @@ function build(){
     if(isHoriz&&nz>.5&&edgeLen>bestLen){bestLen=edgeLen;bestEdge=i;bestZ=(a[1]+b[1])/2}
   }
 
-  // ── Door assembly (axis-aligned, no rotation) ──
+  // ── Door assembly (5" thick door on 4" wall) ──
   if(bestEdge>=0){
     const ea=fp[bestEdge],eb=fp[(bestEdge+1)%fp.length];
+    const [fnx,fnz]=edgeNormal(ea,eb);
     const dW=In(S.doorWidth),dOff=In(S.doorOffset);
     const dH=Math.min(wallH-.2,6.67);
-    // Left-to-right along X
+    const doorT=In(5); // 5 inch door thickness
     const leftX=Math.min(ea[0],eb[0]);
-    const wallZ=(ea[1]+eb[1])/2; // Z position of this wall
+    // Wall center Z is inward by T/2 from outside face
+    const wallCenterZ=(ea[1]+eb[1])/2-fnz*T/2;
     const doorCX=leftX+dOff+dW/2;
-    const doorZ=wallZ; // same Z as the wall
 
-    // Door panel (width along X, thin in Z)
+    // Door panel (5" thick)
     const dMat=new THREE.MeshStandardMaterial({color:0xf0f0ee,roughness:.35,metalness:.05});
-    const dMe=new THREE.Mesh(new THREE.BoxGeometry(dW,dH,T*.7),dMat);
-    dMe.position.set(doorCX,fTop+dH/2,doorZ);dMe.castShadow=true;cooler.add(dMe);
+    const dMe=new THREE.Mesh(new THREE.BoxGeometry(dW,dH,doorT),dMat);
+    dMe.position.set(doorCX,fTop+dH/2,wallCenterZ);dMe.castShadow=true;cooler.add(dMe);
 
-    // Frame sides
+    // Frame sides (5" thick)
     const frM=new THREE.MeshStandardMaterial({color:0xe8e8e6,roughness:.4,metalness:.08});
     [-1,1].forEach(s=>{
-      const fm=new THREE.Mesh(new THREE.BoxGeometry(.1,dH+.06,T*.85),frM);
-      fm.position.set(doorCX+s*(dW/2+.05),fTop+dH/2,doorZ);cooler.add(fm);
+      const fm=new THREE.Mesh(new THREE.BoxGeometry(.1,dH+.06,doorT),frM);
+      fm.position.set(doorCX+s*(dW/2+.05),fTop+dH/2,wallCenterZ);cooler.add(fm);
     });
     // Frame top
-    const tfm=new THREE.Mesh(new THREE.BoxGeometry(dW+.12,.1,T*.85),frM);
-    tfm.position.set(doorCX,fTop+dH+.05,doorZ);cooler.add(tfm);
+    const tfm=new THREE.Mesh(new THREE.BoxGeometry(dW+.12,.1,doorT),frM);
+    tfm.position.set(doorCX,fTop+dH+.05,wallCenterZ);cooler.add(tfm);
 
     // Threshold
-    const thMe=new THREE.Mesh(new THREE.BoxGeometry(dW+.02,.06,T*.72),new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:.8}));
-    thMe.position.set(doorCX,fTop+.03,doorZ);cooler.add(thMe);
+    const thMe=new THREE.Mesh(new THREE.BoxGeometry(dW+.02,.06,doorT),new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:.8}));
+    thMe.position.set(doorCX,fTop+.03,wallCenterZ);cooler.add(thMe);
 
-    // Hardware
+    // Hardware on the outer face
     const chrM=new THREE.MeshStandardMaterial({color:0xd8dce0,roughness:.2,metalness:.75});
     const chrA=new THREE.MeshStandardMaterial({color:0xc0c4c8,roughness:.25,metalness:.8});
-    const hwZ=doorZ+T*.45; // front face
+    const hwZ=wallCenterZ+doorT/2+.01; // front face of door
 
     // 3 Strap hinges (right side of door)
     [.85,.50,.15].forEach(pct=>{
@@ -534,25 +536,24 @@ function build(){
   const liMe=new THREE.Mesh(new THREE.BoxGeometry(W*.3,.04,.08),liM);
   liMe.position.set(0,fTop+wallH-T*.3,0);cooler.add(liMe);
 
-  // ── Dimension lines: show original shape dimensions, positioned at outer face ──
-  const dOff=.4,oy=fTop+wallH+dOff;
+  // ── Dimension lines: outside face measurements (fp = outside face points) ──
+  const dOff=.3,oy=fTop+wallH+dOff;
   for(let i=0;i<fp.length;i++){
     const a=fp[i],b=fp[(i+1)%fp.length];
     const dx=b[0]-a[0],dz=b[1]-a[1];
-    // Original shape edge length (design intent dimension)
-    const edgeLen=Math.round(Math.sqrt(dx*dx+dz*dz)*12); // back to inches
+    const edgeLen=Math.round(Math.sqrt(dx*dx+dz*dz)*12);
     if(edgeLen<2)continue;
     const [nx,nz]=edgeNormal(a,b);
-    // Position dim lines at outer face (offset outward by T/2 + small gap)
-    const outOff=T/2+.15;
+    // Position at outside face + small gap outward
+    const gap=.12;
     addDim(
-      new THREE.Vector3(a[0]+nx*outOff,oy,a[1]+nz*outOff),
-      new THREE.Vector3(b[0]+nx*outOff,oy,b[1]+nz*outOff),
-      fmtIn(edgeLen),new THREE.Vector3(nx*.15,.15,nz*.15),.7
+      new THREE.Vector3(a[0]+nx*gap,oy,a[1]+nz*gap),
+      new THREE.Vector3(b[0]+nx*gap,oy,b[1]+nz*gap),
+      fmtIn(edgeLen),new THREE.Vector3(nx*.12,.15,nz*.12),.7
     );
   }
-  // Height
-  const hc=outerV[0];
+  // Height at first outside corner
+  const hc=fp[0];
   addDim(new THREE.Vector3(hc[0]+.25,fTop,hc[1]+.25),new THREE.Vector3(hc[0]+.25,fTop+wallH,hc[1]+.25),fmtIn(S.height),new THREE.Vector3(.2,0,.2));
 }
 
