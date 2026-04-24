@@ -534,18 +534,20 @@ function build(){
   const liMe=new THREE.Mesh(new THREE.BoxGeometry(W*.3,.04,.08),liM);
   liMe.position.set(0,fTop+wallH-T*.3,0);cooler.add(liMe);
 
-  // ── Dimension lines per edge, anchored to outer polygon vertices ──
+  // ── Dimension lines: show original shape dimensions, positioned at outer face ──
   const dOff=.4,oy=fTop+wallH+dOff;
   for(let i=0;i<fp.length;i++){
-    const a=outerV[i],b=outerV[(i+1)%fp.length];
+    const a=fp[i],b=fp[(i+1)%fp.length];
     const dx=b[0]-a[0],dz=b[1]-a[1];
-    const edgeLen=Math.round(Math.sqrt(dx*dx+dz*dz)*12);
+    // Original shape edge length (design intent dimension)
+    const edgeLen=Math.round(Math.sqrt(dx*dx+dz*dz)*12); // back to inches
     if(edgeLen<2)continue;
-    const [nx,nz]=edgeNormal(fp[i],fp[(i+1)%fp.length]);
-    const nd=.2;
+    const [nx,nz]=edgeNormal(a,b);
+    // Position dim lines at outer face (offset outward by T/2 + small gap)
+    const outOff=T/2+.15;
     addDim(
-      new THREE.Vector3(a[0]+nx*nd,oy,a[1]+nz*nd),
-      new THREE.Vector3(b[0]+nx*nd,oy,b[1]+nz*nd),
+      new THREE.Vector3(a[0]+nx*outOff,oy,a[1]+nz*outOff),
+      new THREE.Vector3(b[0]+nx*outOff,oy,b[1]+nz*outOff),
       fmtIn(edgeLen),new THREE.Vector3(nx*.15,.15,nz*.15),.7
     );
   }
