@@ -38,12 +38,6 @@
   .canvas-area{flex:1;position:relative;background:var(--canvas-bg);background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,.4) 0%,transparent 70%)}
   .canvas-area canvas{display:block;width:100%!important;height:100%!important}
 
-  .dim-overlay{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:2}
-  .dim-label{position:absolute;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500;color:var(--text-dark);background:rgba(255,255,255,.92);padding:2px 8px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.1)}
-  .dim-label-width{top:30px;left:50%;transform:translateX(-50%)}
-  .dim-label-depth{top:50%;right:30px;transform:translateY(-50%)}
-  .dim-label-height{bottom:50%;left:30px;writing-mode:vertical-rl;transform:rotate(180deg)}
-
   .bottom-bar{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:10px;background:var(--panel-bg);padding:8px 16px;border-radius:10px;box-shadow:var(--panel-shadow);border:1px solid var(--border)}
   .bottom-bar button{font-family:'Outfit',sans-serif;font-size:13px;font-weight:500;padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--panel-bg);color:var(--text-mid);cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s}
   .bottom-bar button:hover{border-color:var(--accent);color:var(--accent)}
@@ -54,6 +48,9 @@
   .right-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 
   .panel-section{padding:20px 24px;border-bottom:1px solid var(--border);animation:fadeInUp .4s ease both}
+  .panel-page{display:none}
+  .panel-page.active{display:contents}
+  .panel-placeholder{padding:40px 24px;text-align:center;color:var(--text-light);font-size:13px;font-weight:500;line-height:1.6}
   .panel-section:nth-child(2){animation-delay:.05s}.panel-section:nth-child(3){animation-delay:.1s}.panel-section:nth-child(4){animation-delay:.15s}.panel-section:nth-child(5){animation-delay:.2s}.panel-section:nth-child(6){animation-delay:.25s}.panel-section:nth-child(7){animation-delay:.3s}.panel-section:nth-child(8){animation-delay:.35s}
   @keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
@@ -96,11 +93,15 @@
   .btn-primary{background:var(--accent);color:#fff}
   .btn-primary:hover{background:var(--accent-hover)}
 
-  .continue-row{padding:16px 24px;border-top:1px solid var(--border)}
-  .btn-continue{font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;color:var(--text-mid);background:none;border:1.5px solid var(--border);border-radius:var(--radius);padding:9px 18px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s;width:100%;justify-content:center}
+  .continue-row{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:center}
+  .btn-continue{font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;color:var(--text-mid);background:none;border:1.5px solid var(--border);border-radius:var(--radius);padding:9px 18px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s;flex:1;justify-content:center}
   .btn-continue:hover{border-color:var(--accent);color:var(--accent)}
   .btn-continue .arrow{font-size:16px;transition:transform .15s}
   .btn-continue:hover .arrow{transform:translateX(3px)}
+  .btn-back{font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;color:var(--text-mid);background:none;border:1.5px solid var(--border);border-radius:var(--radius);padding:9px 18px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s}
+  .btn-back:hover{border-color:var(--accent);color:var(--accent)}
+  .btn-back .arrow{font-size:16px;transition:transform .15s}
+  .btn-back:hover .arrow{transform:translateX(-3px)}
 
   .color-row{display:flex;align-items:center;gap:12px;margin-top:12px}
   .color-preview{width:36px;height:36px;border-radius:8px;border:2px solid var(--border);cursor:pointer;overflow:hidden;position:relative;flex-shrink:0}
@@ -163,41 +164,58 @@
   <div class="canvas-area" id="canvas-area">
     <!-- Axis Gizmo -->
     <canvas id="axis-gizmo" width="120" height="120" style="position:absolute;top:12px;left:12px;z-index:3;pointer-events:none;width:5rem!important;height:5rem!important;"></canvas>
-    <div class="dim-overlay" id="dim-overlay" style="display:none;">
-      <div class="dim-label dim-label-width" id="dim-w">150"</div>
-      <div class="dim-label dim-label-depth" id="dim-d">150"</div>
-      <div class="dim-label dim-label-height" id="dim-h">100"</div>
-    </div>
     <div class="support-badge"><button class="badge-btn badge-help">?</button><button class="badge-btn badge-support">Support</button></div>
     <div class="bottom-bar">
       <button><span class="plus">+</span> Add Compartments/Refrig/Lights/BlueZone</button>
     </div>
   </div>
 
-  <div class="right-panel">
-    <div class="panel-section"><div class="section-label">Walk-In Type</div><div class="toggle-group"><button class="toggle-option" data-val="outdoor" id="type-outdoor">Outdoor Walk-In</button><button class="toggle-option active" data-val="indoor" id="type-indoor">Indoor Walk-In</button></div></div>
-    <div class="panel-section"><div class="section-label">Compartment Temperature</div><div class="toggle-group"><button class="toggle-option active" data-val="cooler" id="temp-cooler">Walk-In Cooler</button><button class="toggle-option" data-val="freezer" id="temp-freezer">Walk-In Freezer</button></div></div>
-    <div class="panel-section"><div class="section-label">Exterior Finish</div>
-      <div class="finish-grid">
-        <div class="finish-swatch active" data-finish="stucco-aluminum" data-color="#c4c8cc"><div class="swatch-circle" style="background:#c4c8cc"></div><div class="swatch-label">Stucco Aluminum</div></div>
-        <div class="finish-swatch" data-finish="galvanized" data-color="#9ea3a8"><div class="swatch-circle" style="background:#9ea3a8"></div><div class="swatch-label">Stucco Galvanized</div></div>
-        <div class="finish-swatch" data-finish="stucco-ss" data-color="#b8bcc0"><div class="swatch-circle" style="background:linear-gradient(135deg,#b8bcc0,#d4d8dc)"></div><div class="swatch-label">Stucco Stainless</div></div>
-        <div class="finish-swatch" data-finish="stainless" data-color="#d0d4d8"><div class="swatch-circle" style="background:linear-gradient(135deg,#a8aeb4,#e0e4e8,#a8aeb4)"></div><div class="swatch-label">Stainless Steel</div></div>
-        <div class="finish-swatch" data-finish="white" data-color="#f0f0f0"><div class="swatch-circle" style="background:#f0f0f0;border:1px solid #ddd"></div><div class="swatch-label">White Coated</div></div>
+  <div class="right-panel" id="right-panel">
+    <!-- PAGE: Walk-In Setup -->
+    <div class="panel-page active" data-page="setup">
+      <div class="panel-section"><div class="section-label">Walk-In Type</div><div class="toggle-group"><button class="toggle-option" data-val="outdoor" id="type-outdoor">Outdoor Walk-In</button><button class="toggle-option active" data-val="indoor" id="type-indoor">Indoor Walk-In</button></div></div>
+      <div class="panel-section"><div class="section-label">Compartment Temperature</div><div class="toggle-group"><button class="toggle-option active" data-val="cooler" id="temp-cooler">Walk-In Cooler</button><button class="toggle-option" data-val="freezer" id="temp-freezer">Walk-In Freezer</button></div></div>
+      <div class="panel-section"><div class="section-label">Exterior Finish</div>
+        <div class="finish-grid">
+          <div class="finish-swatch active" data-finish="stucco-aluminum" data-color="#c4c8cc"><div class="swatch-circle" style="background:#c4c8cc"></div><div class="swatch-label">Stucco Aluminum</div></div>
+          <div class="finish-swatch" data-finish="galvanized" data-color="#9ea3a8"><div class="swatch-circle" style="background:#9ea3a8"></div><div class="swatch-label">Stucco Galvanized</div></div>
+          <div class="finish-swatch" data-finish="stucco-ss" data-color="#b8bcc0"><div class="swatch-circle" style="background:linear-gradient(135deg,#b8bcc0,#d4d8dc)"></div><div class="swatch-label">Stucco Stainless</div></div>
+          <div class="finish-swatch" data-finish="stainless" data-color="#d0d4d8"><div class="swatch-circle" style="background:linear-gradient(135deg,#a8aeb4,#e0e4e8,#a8aeb4)"></div><div class="swatch-label">Stainless Steel</div></div>
+          <div class="finish-swatch" data-finish="white" data-color="#f0f0f0"><div class="swatch-circle" style="background:#f0f0f0;border:1px solid #ddd"></div><div class="swatch-label">White Coated</div></div>
+        </div>
+        <div class="color-row"><div class="color-preview"><input type="color" id="custom-color" value="#c4c8cc"></div><span class="color-text">Custom finish color</span></div>
       </div>
-      <div class="color-row"><div class="color-preview"><input type="color" id="custom-color" value="#c4c8cc"></div><span class="color-text">Custom finish color</span></div>
+      <div class="panel-section"><div class="section-label">Compartment Width (Left to Right) (DIM F)</div><div class="slider-row"><div class="slider-header"><span></span><span class="slider-value" id="val-width">12' 6"</span></div><div class="slider-track"><input type="range" id="slider-width" min="72" max="360" step="6" value="150"></div><div class="slider-range-labels"><span>6' 0"</span><span>30' 0"</span></div></div></div>
+      <div class="panel-section"><div class="section-label">Compartment Depth (Front to Back) (DIM E)</div><div class="slider-row"><div class="slider-header"><span></span><span class="slider-value" id="val-depth">12' 6"</span></div><div class="slider-track"><input type="range" id="slider-depth" min="72" max="360" step="6" value="150"></div><div class="slider-range-labels"><span>6' 0"</span><span>30' 0"</span></div></div></div>
+      <div class="panel-section"><div class="section-label">Compartment Height (DIM A)</div><div class="slider-row"><div class="slider-header"><span></span><span class="slider-value" id="val-height">8' 4"</span></div><div class="slider-track"><input type="range" id="slider-height" min="90" max="120" step="2" value="100"></div><div class="slider-range-labels"><span>7' 6"</span><span>10' 0"</span></div></div></div>
+      <div class="panel-section"><div class="section-label">Add Floor in Compartment?</div><select class="custom-select" id="floor-select"><option value="standard">Standard Floor (600lbs per sq ft) NO ROLLING TRAFFIC</option><option value="heavy">Heavy-Duty Floor (1000lbs per sq ft)</option><option value="reinforced">Reinforced Floor - Forklift Rated</option><option value="none">No Floor (Existing Concrete)</option></select></div>
+      <div class="panel-section"><div class="section-label">Compartment Ramp</div><div class="toggle-group"><button class="toggle-option active" data-val="interior" id="ramp-interior">Interior Ramp</button><button class="toggle-option" data-val="exterior" id="ramp-exterior">Exterior Ramp</button><button class="toggle-option" data-val="none" id="ramp-none">No Ramp</button></div></div>
+      <div class="panel-section"><div class="section-label">Display Options</div>
+        <div class="check-row"><span class="check-label">Show Dimensions</span><div class="switch"><input type="checkbox" id="toggle-dims" checked><div class="switch-track"></div></div></div>
+        <div class="check-row"><span class="check-label">Wireframe Mode</span><div class="switch"><input type="checkbox" id="toggle-wireframe"><div class="switch-track"></div></div></div>
+      </div>
     </div>
-    <div class="panel-section"><div class="section-label">Compartment Width (Left to Right) (DIM F)</div><div class="slider-row"><div class="slider-header"><span></span><span class="slider-value" id="val-width">12' 6"</span></div><div class="slider-track"><input type="range" id="slider-width" min="72" max="360" step="6" value="150"></div><div class="slider-range-labels"><span>6' 0"</span><span>30' 0"</span></div></div></div>
-    <div class="panel-section"><div class="section-label">Compartment Depth (Front to Back) (DIM E)</div><div class="slider-row"><div class="slider-header"><span></span><span class="slider-value" id="val-depth">12' 6"</span></div><div class="slider-track"><input type="range" id="slider-depth" min="72" max="360" step="6" value="150"></div><div class="slider-range-labels"><span>6' 0"</span><span>30' 0"</span></div></div></div>
-    <div class="panel-section"><div class="section-label">Compartment Height (DIM A)</div><div class="slider-row"><div class="slider-header"><span></span><span class="slider-value" id="val-height">8' 4"</span></div><div class="slider-track"><input type="range" id="slider-height" min="90" max="120" step="2" value="100"></div><div class="slider-range-labels"><span>7' 6"</span><span>10' 0"</span></div></div></div>
-    <div class="panel-section"><div class="section-label">Add Floor in Compartment?</div><select class="custom-select" id="floor-select"><option value="standard">Standard Floor (600lbs per sq ft) NO ROLLING TRAFFIC</option><option value="heavy">Heavy-Duty Floor (1000lbs per sq ft)</option><option value="reinforced">Reinforced Floor - Forklift Rated</option><option value="none">No Floor (Existing Concrete)</option></select></div>
-    <div class="panel-section"><div class="section-label">Compartment Ramp</div><div class="toggle-group"><button class="toggle-option active" data-val="interior" id="ramp-interior">Interior Ramp</button><button class="toggle-option" data-val="exterior" id="ramp-exterior">Exterior Ramp</button><button class="toggle-option" data-val="none" id="ramp-none">No Ramp</button></div></div>
-    <div class="panel-section"><div class="section-label">Display Options</div>
-      <div class="check-row"><span class="check-label">Show Dimensions</span><div class="switch"><input type="checkbox" id="toggle-dims"><div class="switch-track"></div></div></div>
-      <div class="check-row"><span class="check-label">Auto Rotate</span><div class="switch"><input type="checkbox" id="toggle-rotate"><div class="switch-track"></div></div></div>
-      <div class="check-row"><span class="check-label">Wireframe Mode</span><div class="switch"><input type="checkbox" id="toggle-wireframe"><div class="switch-track"></div></div></div>
+    <!-- PAGE: Compartment 1 Shape -->
+    <div class="panel-page" data-page="shape"><div class="panel-placeholder">Compartment Shape options will appear here.<br>Configure wall layout, L-shapes, and multi-zone compartments.</div></div>
+    <!-- PAGE: Compartment 1 Exterior -->
+    <div class="panel-page" data-page="exterior"><div class="panel-placeholder">Exterior panel options will appear here.<br>Configure panel finish, insulation type, and exterior trim.</div></div>
+    <!-- PAGE: Compartment 1 Interior -->
+    <div class="panel-page" data-page="interior"><div class="panel-placeholder">Interior options will appear here.<br>Configure shelving, wall finish, floor drains, and lighting.</div></div>
+    <!-- PAGE: Compartment 1 Door Options -->
+    <div class="panel-page" data-page="door"><div class="panel-placeholder">Door options will appear here.<br>Configure door type, swing direction, hardware, and glass doors.</div></div>
+    <!-- PAGE: Blast Chiller (outdoor only) -->
+    <div class="panel-page" data-page="blast"><div class="panel-placeholder">Blast Chiller options will appear here.<br>Configure rapid cooling cycles and blast chiller units.</div></div>
+    <!-- PAGE: Glass Display Doors (outdoor only) -->
+    <div class="panel-page" data-page="glass"><div class="panel-placeholder">Glass Display Door options will appear here.<br>Configure glass door panels, lighting, and merchandising zones.</div></div>
+    <!-- PAGE: Show Dimensions -->
+    <div class="panel-page" data-page="dims"><div class="panel-placeholder">Dimension view active.<br>All measurements are displayed on the 3D model.</div></div>
+    <!-- PAGE: Room Setup -->
+    <div class="panel-page" data-page="room"><div class="panel-placeholder">Room Setup options will appear here.<br>Configure room dimensions, clearances, and installation constraints.</div></div>
+    <!-- Tab pagination nav (always visible) -->
+    <div class="continue-row" id="panel-nav">
+      <button class="btn-back" id="btn-back" style="display:none"><span class="arrow">&larr;</span> Back</button>
+      <button class="btn-continue" id="btn-next">Continue to Compartment 1 <span class="arrow">&rarr;</span></button>
     </div>
-    <div class="continue-row"><button class="btn-continue">Continue to Compartment 1 <span class="arrow">&rarr;</span></button></div>
   </div>
 </div>
 
@@ -254,7 +272,7 @@ const S = {
   width:150, depth:150, height:100,
   wallT:4, doorWidth:34, doorOffset:19,
   floor:'standard', ramp:'interior',
-  autoRotate:false, showDims:false, wireframe:false,
+  autoRotate:false, showDims:true, wireframe:false,
 };
 const I=i=>i/12; // inches to feet
 const fmtFtIn=i=>{const f=Math.floor(i/12),n=Math.round(i%12);return f+"' "+n+'"'};
@@ -296,6 +314,7 @@ ctrl.target.set(0,3.5,0);ctrl.enableDamping=true;ctrl.minDist=5;ctrl.maxDist=40;
 // Building blocks
 // ═══════════════════════════════════════════════════════
 const cooler=new THREE.Group();scene.add(cooler);
+const dimGroup=new THREE.Group();cooler.add(dimGroup); // separate group for dimension lines/labels
 const extMat=new THREE.MeshStandardMaterial({color:S.finishColor,roughness:.55,metalness:.15});
 const edgeMat=new THREE.LineBasicMaterial({color:0x888888,transparent:true,opacity:.22});
 const dimLineMat=new THREE.LineBasicMaterial({color:0xdd3333});
@@ -308,7 +327,7 @@ function addBox(w,h,d,x,y,z,mat){
   const eg=new THREE.EdgesGeometry(m.geometry);const ln=new THREE.LineSegments(eg,edgeMat);
   ln.position.copy(m.position);cooler.add(ln);return m;
 }
-function addLine(a,b){const g=new THREE.BufferGeometry().setFromPoints([a,b]);cooler.add(new THREE.Line(g,dimLineMat))}
+function addLine(a,b){const g=new THREE.BufferGeometry().setFromPoints([a,b]);dimGroup.add(new THREE.Line(g,dimLineMat))}
 
 // 3D Text Sprite
 function makeSprite(text,fs){
@@ -339,14 +358,16 @@ function addDim(p1,p2,label,offV,sc){
   const mid=new THREE.Vector3().addVectors(p1,p2).multiplyScalar(.5);
   if(offV)mid.add(offV);
   const sp=makeSprite(label);if(sc)sp.scale.multiplyScalar(sc);
-  sp.position.copy(mid);cooler.add(sp);
+  sp.position.copy(mid);dimGroup.add(sp);
 }
 
 // ═══════════════════════════════════════════════════════
 // BUILD
 // ═══════════════════════════════════════════════════════
 function build(){
+  clearGroup(dimGroup);
   clearGroup(cooler);
+  cooler.add(dimGroup); // re-add after clear
   const W=I(S.width),H=I(S.height),D=I(S.depth),T=I(S.wallT);
   const floorT=T*.6,hasFloor=S.floor!=='none',fTop=hasFloor?floorT:0;
   const innerH=H-T,isOut=S.type==='outdoor';
@@ -504,19 +525,13 @@ function updateMat(){
   else{extMat.metalness=.1;extMat.roughness=.6}
   extMat.wireframe=S.wireframe;extMat.needsUpdate=true;
 }
-function updateDimLabels(){
-  document.getElementById('dim-w').textContent=S.width+'"';
-  document.getElementById('dim-d').textContent=S.depth+'"';
-  document.getElementById('dim-h').textContent=S.height+'"';
-  document.getElementById('dim-overlay').style.display=S.showDims?'block':'none';
-}
 function updateSliders(){
   document.getElementById('val-width').textContent=fmtFtIn(S.width);
   document.getElementById('val-depth').textContent=fmtFtIn(S.depth);
   document.getElementById('val-height').textContent=fmtFtIn(S.height);
 }
 
-build();updateMat();updateDimLabels();updateSliders();
+build();updateMat();updateSliders();
 
 // ═══════════════════════════════════════════════════════
 // UI
@@ -527,9 +542,11 @@ setupToggle(['type-outdoor','type-indoor'],'type',()=>{
   const isOutdoor = S.type==='outdoor';
   document.querySelectorAll('.nav-tab.indoor-tab').forEach(t=>{t.style.display=isOutdoor?'none':''});
   document.querySelectorAll('.nav-tab.outdoor-tab').forEach(t=>{t.style.display=isOutdoor?'':'none'});
-  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-  const visibleTabs = document.querySelectorAll(isOutdoor?'.nav-tab.outdoor-tab':'.nav-tab.indoor-tab');
-  if(visibleTabs.length) visibleTabs[0].classList.add('active');
+  // Reset to first tab
+  currentTabIndex = 0;
+  updatePanelPage();
+  updateTabHighlight();
+  updateNavButtons();
   build(); pushUndo();
 });
 setupToggle(['temp-cooler','temp-freezer'],'temperature',()=>pushUndo());
@@ -538,11 +555,15 @@ setupToggle(['ramp-interior','ramp-exterior','ramp-none'],'ramp',()=>{build();pu
 document.querySelectorAll('.finish-swatch').forEach(sw=>{sw.addEventListener('click',()=>{document.querySelectorAll('.finish-swatch').forEach(s=>s.classList.remove('active'));sw.classList.add('active');S.finish=sw.dataset.finish;S.finishColor=sw.dataset.color;document.getElementById('custom-color').value=S.finishColor;updateMat();build();pushUndo()})});
 document.getElementById('custom-color').addEventListener('change',e=>{S.finishColor=e.target.value;document.querySelectorAll('.finish-swatch').forEach(s=>s.classList.remove('active'));updateMat();build();pushUndo()});
 document.getElementById('custom-color').addEventListener('input',e=>{S.finishColor=e.target.value;document.querySelectorAll('.finish-swatch').forEach(s=>s.classList.remove('active'));updateMat();build()});
-['width','depth','height'].forEach(dim=>{document.getElementById('slider-'+dim).addEventListener('input',e=>{S[dim]=parseInt(e.target.value);updateSliders();updateDimLabels();build()})});
+['width','depth','height'].forEach(dim=>{document.getElementById('slider-'+dim).addEventListener('input',e=>{S[dim]=parseInt(e.target.value);updateSliders();build()})});
 document.getElementById('floor-select').addEventListener('change',e=>{S.floor=e.target.value;build();pushUndo()});
 
-document.getElementById('toggle-dims').addEventListener('change',e=>{S.showDims=e.target.checked;document.getElementById('btn-show-dims').classList.toggle('active',S.showDims);updateDimLabels()});
-document.getElementById('toggle-rotate').addEventListener('change',e=>{S.autoRotate=e.target.checked;syncRotateUI()});
+// Show Dimensions toggle
+document.getElementById('toggle-dims').addEventListener('change',e=>{
+  S.showDims = e.target.checked;
+  dimGroup.visible = S.showDims;
+});
+
 document.getElementById('toggle-wireframe').addEventListener('change',e=>{S.wireframe=e.target.checked;updateMat();build()});
 
 document.getElementById('btn-reset-view').addEventListener('click',()=>ctrl.reset());
@@ -582,20 +603,111 @@ const btnAR=document.getElementById('btn-auto-rotate'),icP=document.getElementBy
 function syncRotateUI(){
   if(S.autoRotate){btnAR.classList.add('active');icP.style.display='';icL.style.display='none';btnAR.title='Pause Auto-Rotate'}
   else{btnAR.classList.remove('active');icP.style.display='none';icL.style.display='';btnAR.title='Play Auto-Rotate'}
-  document.getElementById('toggle-rotate').checked=S.autoRotate;
 }
 syncRotateUI();
 btnAR.addEventListener('click',()=>{S.autoRotate=!S.autoRotate;syncRotateUI()});
 
 // Tab clicks - visual active state only, no triggers
 document.querySelectorAll('.nav-tab').forEach(t=>{t.addEventListener('click',()=>{
-  // Only toggle active within the same tab set (indoor or outdoor)
   const isIndoor=t.classList.contains('indoor-tab');
   const isOutdoor=t.classList.contains('outdoor-tab');
   const setClass=isOutdoor?'.nav-tab.outdoor-tab':'.nav-tab.indoor-tab';
   document.querySelectorAll(setClass).forEach(n=>n.classList.remove('active'));
   t.classList.add('active');
+  // Sync right panel page
+  navigateToTab(t.dataset.tab);
 })});
+
+// ═══════════════════════════════════════════════════════
+// Tab Pagination System
+// ═══════════════════════════════════════════════════════
+const indoorTabs = ['setup','shape','exterior','interior','door','dims'];
+const outdoorTabs = ['setup','shape','exterior','interior','door','blast','glass','dims','room'];
+
+const tabLabels = {
+  setup:'Walk-In Setup', shape:'Compartment 1 Shape', exterior:'Compartment 1 Exterior',
+  interior:'Compartment 1 Interior', door:'Compartment 1 Door Options',
+  blast:'Blast Chiller Options', glass:'Glass Display Doors Options',
+  dims:'Show Dimensions', room:'Room Setup'
+};
+
+let currentTabIndex = 0;
+
+function getActiveTabs(){
+  return S.type === 'outdoor' ? outdoorTabs : indoorTabs;
+}
+
+function navigateToTab(tabId){
+  const tabs = getActiveTabs();
+  const idx = tabs.indexOf(tabId);
+  if(idx === -1) return;
+  currentTabIndex = idx;
+  updatePanelPage();
+  updateTabHighlight();
+  updateNavButtons();
+}
+
+function updatePanelPage(){
+  const tabs = getActiveTabs();
+  const tabId = tabs[currentTabIndex];
+  // Hide all pages, show active
+  document.querySelectorAll('.panel-page').forEach(p => p.classList.remove('active'));
+  const page = document.querySelector(`.panel-page[data-page="${tabId}"]`);
+  if(page) page.classList.add('active');
+  // Scroll right panel to top
+  document.getElementById('right-panel').scrollTop = 0;
+}
+
+function updateTabHighlight(){
+  const tabs = getActiveTabs();
+  const tabId = tabs[currentTabIndex];
+  const setClass = S.type==='outdoor' ? '.nav-tab.outdoor-tab' : '.nav-tab.indoor-tab';
+  document.querySelectorAll(setClass).forEach(n => n.classList.remove('active'));
+  const match = document.querySelector(`${setClass}[data-tab="${tabId}"]`);
+  if(match) match.classList.add('active');
+}
+
+function updateNavButtons(){
+  const tabs = getActiveTabs();
+  const btnBack = document.getElementById('btn-back');
+  const btnNext = document.getElementById('btn-next');
+  const isFirst = currentTabIndex === 0;
+  const isLast = currentTabIndex === tabs.length - 1;
+
+  btnBack.style.display = isFirst ? 'none' : 'flex';
+
+  if(isLast){
+    btnNext.innerHTML = 'Finish <span class="arrow">&#10003;</span>';
+  } else {
+    const nextTab = tabs[currentTabIndex + 1];
+    const nextLabel = tabLabels[nextTab] || nextTab;
+    // Shorten label for button
+    const short = nextLabel.replace('Compartment 1 ','').replace(' Options','');
+    btnNext.innerHTML = `Continue to ${short} <span class="arrow">&rarr;</span>`;
+  }
+}
+
+document.getElementById('btn-next').addEventListener('click',()=>{
+  const tabs = getActiveTabs();
+  if(currentTabIndex < tabs.length - 1){
+    currentTabIndex++;
+    updatePanelPage();
+    updateTabHighlight();
+    updateNavButtons();
+  }
+});
+
+document.getElementById('btn-back').addEventListener('click',()=>{
+  if(currentTabIndex > 0){
+    currentTabIndex--;
+    updatePanelPage();
+    updateTabHighlight();
+    updateNavButtons();
+  }
+});
+
+// Initialize nav buttons
+updateNavButtons();
 
 // ═══════════════════════════════════════════════════════
 // Undo / Redo system
@@ -638,7 +750,7 @@ function restoreState(json){
   document.querySelectorAll('.nav-tab.indoor-tab').forEach(t=>{t.style.display=isOut?'none':''});
   document.querySelectorAll('.nav-tab.outdoor-tab').forEach(t=>{t.style.display=isOut?'':'none'});
 
-  updateMat(); updateSliders(); updateDimLabels(); build();
+  updateMat(); updateSliders(); build();
   updateUndoRedoUI();
 }
 
