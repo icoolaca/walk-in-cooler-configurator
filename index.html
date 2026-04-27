@@ -154,7 +154,10 @@
     <!-- PAGE: Compartment 1 Shape -->
     <div class="panel-page" data-page="shape">
       <div class="panel-section"><div class="section-label">Compartment Shape</div><div class="shape-grid" id="shape-grid"></div></div>
-      <div class="panel-section"><div class="section-label">Edge Dimensions</div><div id="edge-sliders"></div></div>
+      <div class="panel-section">
+        <div class="section-label">Floor Plan Editor <span style="font-weight:400;color:var(--text-light);font-size:9px;text-transform:none">(drag vertices to resize)</span></div>
+        <canvas id="floor-plan-canvas" width="600" height="600" style="width:100%;height:auto;border:1.5px solid var(--border);border-radius:var(--radius);cursor:crosshair;background:#fafbfc"></canvas>
+      </div>
     </div>
     <!-- PAGE: Compartment 1 Exterior -->
     <div class="panel-page" data-page="exterior"><div class="panel-placeholder">Exterior panel options will appear here.<br>Configure panel finish, insulation type, and exterior trim.</div></div>
@@ -388,17 +391,60 @@ function build(){
     rMesh.castShadow=true;cooler.add(rMesh);
   }
 
-  // ── Walls: all panels full length, offset inward, overlapping at corners ──
+  // ── Walls: corner posts + panels between them ──
+  // Each vertex gets a T×T corner post, outer corner aligned to shape point.
+  // Each edge gets a panel that spans between adjacent posts.
+  // This guarantees no gaps and no overlaps at any corner type.
+
+  // Step 1: Compute corner post positions
+  // Each post's outer corner sits at the shape point fp[i].
+  // The post extends T inward in the direction toward the polygon centroid.
+  const postPositions=[]; // center of each T×T post
+  for(let i=0;i<fp.length;i++){
+    const p=fp[i];
+    const prev=fp[(i-1+fp.length)%fp.length], next=fp[(i+1)%fp.length];
+    // Determine which quadrant the post extends into from the outer corner
+    // Use the two adjacent edge directions to figure out the inward diagonal
+    const [n1x,n1z]=edgeNormal(prev,p);
+    const [n2x,n2z]=edgeNormal(p,next);
+    // Inward direction = average of the two inward normals (negated outward normals)
+    let ix=-(n1x+n2x),iz=-(n1z+n2z);
+    const il=Math.sqrt(ix*ix+iz*iz)||1;
+    ix/=il;iz/=il;
+    // Post center is T/2 inward along both X and Z from the corner point
+    // But we need it axis-aligned, so figure out which way X and Z go
+    const signX=ix>0?1:ix<0?-1:0;
+    const signZ=iz>0?1:iz<0?-1:0;
+    const cx=p[0]+signX*T/2;
+    const cz=p[1]+signZ*T/2;
+    postPositions.push({x:cx,z:cz,signX,signZ,px:p[0],pz:p[1]});
+
+    // Draw corner post
+    const postGeo=new THREE.BoxGeometry(T,wallH,T);
+    const post=new THREE.Mesh(postGeo,extMat);
+    post.position.set(cx,fTop+wallH/2,cz);
+    post.castShadow=true;post.receiveShadow=true;cooler.add(post);
+    const peg=new THREE.LineSegments(new THREE.EdgesGeometry(postGeo),edgeMat);
+    peg.position.copy(post.position);cooler.add(peg);
+  }
+
+  // Step 2: Panels between adjacent posts
   for(let i=0;i<fp.length;i++){
     const a=fp[i],b=fp[(i+1)%fp.length];
+    const postA=postPositions[i],postB=postPositions[(i+1)%fp.length];
     const dx=b[0]-a[0],dz=b[1]-a[1];
-    const len=Math.sqrt(dx*dx+dz*dz);
-    if(len<.01)continue;
     const isHoriz=Math.abs(dx)>=Math.abs(dz);
     const [nx,nz]=edgeNormal(a,b);
 
     if(isHoriz){
-      const x1=Math.min(a[0],b[0]),x2=Math.max(a[0],b[0]);
+      // Panel runs along X between the inner edges of the two posts
+      // Post A inner X edge: postA.x + signX towards center? No...
+      // Post A's X range: [postA.px, postA.px + signX*T]
+      // Panel starts at the inner X edge of post A and ends at inner X edge of post B
+      const postA_innerX=postA.px + postA.signX*T;
+      const postB_innerX=postB.px + postB.signX*T;
+      const x1=Math.min(postA_innerX,postB_innerX);
+      const x2=Math.max(postA_innerX,postB_innerX);
       const panelW=x2-x1;
       if(panelW<.01)continue;
       const midX=(x1+x2)/2;
@@ -410,7 +456,11 @@ function build(){
       const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
       eg.position.copy(wall.position);cooler.add(eg);
     } else {
-      const z1=Math.min(a[1],b[1]),z2=Math.max(a[1],b[1]);
+      // Panel runs along Z between the inner edges of the two posts
+      const postA_innerZ=postA.pz + postA.signZ*T;
+      const postB_innerZ=postB.pz + postB.signZ*T;
+      const z1=Math.min(postA_innerZ,postB_innerZ);
+      const z2=Math.max(postA_innerZ,postB_innerZ);
       const panelD=z2-z1;
       if(panelD<.01)continue;
       const midZ=(z1+z2)/2;
@@ -563,45 +613,222 @@ function buildShapeGrid(){
       shapePoints=JSON.parse(JSON.stringify(SHAPES[name]));
       document.querySelectorAll('.shape-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
-      buildEdgeSliders();
+      drawFloorPlan();
       build();pushUndo();
     });
     grid.appendChild(btn);
   });
 }
 
-function buildEdgeSliders(){
-  const container=document.getElementById('edge-sliders');
-  container.innerHTML='';
+// ═══════════════════════════════════════════════════════
+// 2D Floor Plan Editor
+// ═══════════════════════════════════════════════════════
+const fpCanvas=document.getElementById('floor-plan-canvas');
+const fpCtx=fpCanvas.getContext('2d');
+const FP_W=600,FP_H=600;
+let fpDragging=-1; // index of vertex being dragged
+
+function fpTransform(pts){
+  // Compute bounding box of shape points (inches)
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  pts.forEach(p=>{minX=Math.min(minX,p[0]);maxX=Math.max(maxX,p[0]);minY=Math.min(minY,p[1]);maxY=Math.max(maxY,p[1])});
+  const w=maxX-minX||1,h=maxY-minY||1;
+  const pad=80;
+  const scale=Math.min((FP_W-pad*2)/w,(FP_H-pad*2)/h);
+  const ox=(FP_W-w*scale)/2,oy=(FP_H-h*scale)/2;
+  return {
+    toCanvas:(p)=>[ox+(p[0]-minX)*scale, oy+(p[1]-minY)*scale],
+    toShape:(cx,cy)=>[(cx-ox)/scale+minX, (cy-oy)/scale+minY],
+    scale
+  };
+}
+
+function drawFloorPlan(){
   const pts=shapePoints;
+  const ctx=fpCtx;
+  ctx.clearRect(0,0,FP_W,FP_H);
+  if(!pts.length)return;
+
+  const tr=fpTransform(pts);
+
+  // Draw grid
+  ctx.strokeStyle='#e8ecf0';ctx.lineWidth=0.5;
+  for(let x=0;x<FP_W;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,FP_H);ctx.stroke()}
+  for(let y=0;y<FP_H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(FP_W,y);ctx.stroke()}
+
+  // Draw filled polygon
+  ctx.beginPath();
+  const p0=tr.toCanvas(pts[0]);
+  ctx.moveTo(p0[0],p0[1]);
+  for(let i=1;i<pts.length;i++){const p=tr.toCanvas(pts[i]);ctx.lineTo(p[0],p[1])}
+  ctx.closePath();
+  ctx.fillStyle='rgba(8,145,178,0.06)';ctx.fill();
+  ctx.strokeStyle='#0891b2';ctx.lineWidth=2;ctx.stroke();
+
+  // Draw hatching inside polygon
+  ctx.save();ctx.clip();
+  ctx.strokeStyle='rgba(8,145,178,0.08)';ctx.lineWidth=0.8;
+  for(let d=-FP_W;d<FP_W+FP_H;d+=12){ctx.beginPath();ctx.moveTo(d,0);ctx.lineTo(d-FP_H,FP_H);ctx.stroke()}
+  ctx.restore();
+
+  // Draw wall thickness (inner polygon)
+  const T_px=4*tr.scale; // 4 inches in pixels
+  // Simple inner offset visualization
+  ctx.beginPath();
+  const innerPts=[];
+  let centX=0,centY=0;
+  pts.forEach(p=>{centX+=p[0];centY+=p[1]});
+  centX/=pts.length;centY/=pts.length;
+  const centC=tr.toCanvas([centX,centY]);
+  for(let i=0;i<pts.length;i++){
+    const pc=tr.toCanvas(pts[i]);
+    const dx=pc[0]-centC[0],dy=pc[1]-centC[1];
+    const dl=Math.sqrt(dx*dx+dy*dy)||1;
+    innerPts.push([pc[0]-dx/dl*T_px,pc[1]-dy/dl*T_px]);
+  }
+  ctx.moveTo(innerPts[0][0],innerPts[0][1]);
+  for(let i=1;i<innerPts.length;i++)ctx.lineTo(innerPts[i][0],innerPts[i][1]);
+  ctx.closePath();
+  ctx.strokeStyle='rgba(8,145,178,0.2)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw edges with dimension labels
+  ctx.font='bold 11px IBM Plex Mono, monospace';
+  ctx.textAlign='center';ctx.textBaseline='middle';
   for(let i=0;i<pts.length;i++){
     const a=pts[i],b=pts[(i+1)%pts.length];
+    const ac=tr.toCanvas(a),bc=tr.toCanvas(b);
     const dx=b[0]-a[0],dy=b[1]-a[1];
-    const len=Math.round(Math.sqrt(dx*dx+dy*dy));
-    if(len<1)continue;
-    const label=String.fromCharCode(65+i); // A, B, C...
-    const row=document.createElement('div');row.className='slider-row';
-    row.innerHTML=`<div class="slider-header"><span style="font-size:13px;font-weight:500">Edge ${label}</span><span class="slider-value">${fmtIn(len)}</span></div>
-      <div class="slider-track"><input type="range" min="24" max="360" step="6" value="${len}"></div>
-      <div class="slider-range-labels"><span>2' 0"</span><span>30' 0"</span></div>`;
-    const slider=row.querySelector('input');
-    const valEl=row.querySelector('.slider-value');
-    slider.addEventListener('input',()=>{
-      const newLen=parseInt(slider.value);
-      valEl.textContent=fmtIn(newLen);
-      // Scale this edge
-      const scale=newLen/len;
-      if(Math.abs(dx)>Math.abs(dy)){
-        pts[(i+1)%pts.length][0]=a[0]+dx*scale;
-      }else{
-        pts[(i+1)%pts.length][1]=a[1]+dy*scale;
-      }
-      build();
-    });
-    slider.addEventListener('change',()=>pushUndo());
-    container.appendChild(row);
+    const edgeLen=Math.round(Math.sqrt(dx*dx+dy*dy));
+    if(edgeLen<2)continue;
+    // Midpoint
+    const mx=(ac[0]+bc[0])/2,my=(ac[1]+bc[1])/2;
+    // Normal for label offset (outward from centroid)
+    let nx=ac[1]-bc[1],ny=bc[0]-ac[0];
+    const nl=Math.sqrt(nx*nx+ny*ny)||1;nx/=nl;ny/=nl;
+    // Check outward direction
+    if(nx*(mx-centC[0])+ny*(my-centC[1])<0){nx=-nx;ny=-ny}
+    const labelX=mx+nx*18,labelY=my+ny*18;
+    // Background
+    const txt=edgeLen+'"';
+    const tw=ctx.measureText(txt).width;
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.fillRect(labelX-tw/2-4,labelY-8,tw+8,16);
+    ctx.strokeStyle='rgba(0,0,0,0.1)';ctx.lineWidth=1;
+    ctx.strokeRect(labelX-tw/2-4,labelY-8,tw+8,16);
+    ctx.fillStyle='#1e293b';
+    ctx.fillText(txt,labelX,labelY);
+  }
+
+  // Draw vertex handles
+  for(let i=0;i<pts.length;i++){
+    const pc=tr.toCanvas(pts[i]);
+    ctx.beginPath();ctx.arc(pc[0],pc[1],7,0,Math.PI*2);
+    ctx.fillStyle=fpDragging===i?'#0891b2':'#fff';
+    ctx.fill();
+    ctx.strokeStyle='#0891b2';ctx.lineWidth=2;ctx.stroke();
+    // Inner dot
+    ctx.beginPath();ctx.arc(pc[0],pc[1],3,0,Math.PI*2);
+    ctx.fillStyle='#0891b2';ctx.fill();
   }
 }
+
+// Mouse interaction
+function fpGetVertex(cx,cy){
+  const pts=shapePoints;
+  const tr=fpTransform(pts);
+  for(let i=0;i<pts.length;i++){
+    const pc=tr.toCanvas(pts[i]);
+    const dx=cx-pc[0],dy=cy-pc[1];
+    if(dx*dx+dy*dy<200)return i; // 14px radius hit area
+  }
+  return -1;
+}
+
+function fpGetMousePos(e){
+  const rect=fpCanvas.getBoundingClientRect();
+  const scaleX=FP_W/rect.width,scaleY=FP_H/rect.height;
+  return [(e.clientX-rect.left)*scaleX,(e.clientY-rect.top)*scaleY];
+}
+
+fpCanvas.addEventListener('pointerdown',e=>{
+  const [cx,cy]=fpGetMousePos(e);
+  const vi=fpGetVertex(cx,cy);
+  if(vi>=0){
+    fpDragging=vi;
+    fpCanvas.setPointerCapture(e.pointerId);
+    fpCanvas.style.cursor='grabbing';
+    drawFloorPlan();
+  }
+});
+
+fpCanvas.addEventListener('pointermove',e=>{
+  const [cx,cy]=fpGetMousePos(e);
+  if(fpDragging>=0){
+    const tr=fpTransform(shapePoints);
+    const [sx,sy]=tr.toShape(cx,cy);
+    const pts=shapePoints;
+    const vi=fpDragging;
+    const oldX=pts[vi][0],oldY=pts[vi][1];
+    // Snap to grid (6-inch increments)
+    const snapX=Math.round(sx/6)*6,snapY=Math.round(sy/6)*6;
+
+    // Rectilinear constraint: when moving a vertex, also move adjacent vertices
+    // to keep all edges horizontal or vertical
+    const n=pts.length;
+    const prevI=(vi-1+n)%n,nextI=(vi+1)%n;
+
+    // Check which coordinate is shared with prev and next
+    // If prev shares X (vertical edge), move prev's X too
+    // If prev shares Y (horizontal edge), move prev's Y too
+    const prev=pts[prevI],next=pts[nextI];
+
+    if(Math.abs(prev[0]-oldX)<1){
+      // Vertical edge to prev → shared X → move both X
+      pts[vi][0]=snapX;
+      prev[0]=snapX;
+    } else if(Math.abs(prev[1]-oldY)<1){
+      // Horizontal edge to prev → shared Y → move both Y
+      pts[vi][1]=snapY;
+      prev[1]=snapY;
+    }
+
+    if(Math.abs(next[0]-oldX)<1){
+      // Vertical edge to next → shared X
+      pts[vi][0]=snapX;
+      next[0]=snapX;
+    } else if(Math.abs(next[1]-oldY)<1){
+      // Horizontal edge to next → shared Y
+      pts[vi][1]=snapY;
+      next[1]=snapY;
+    }
+
+    // If neither matched, just move the point (freeform)
+    if(pts[vi][0]===oldX&&pts[vi][1]===oldY){
+      pts[vi][0]=snapX;
+      pts[vi][1]=snapY;
+    }
+
+    drawFloorPlan();
+    build();
+  } else {
+    // Hover cursor
+    const vi=fpGetVertex(cx,cy);
+    fpCanvas.style.cursor=vi>=0?'grab':'crosshair';
+  }
+});
+
+fpCanvas.addEventListener('pointerup',e=>{
+  if(fpDragging>=0){
+    fpDragging=-1;
+    fpCanvas.style.cursor='crosshair';
+    fpCanvas.releasePointerCapture(e.pointerId);
+    drawFloorPlan();
+    pushUndo();
+  }
+});
+
+function buildEdgeSliders(){ drawFloorPlan(); } // compatibility alias
 
 buildShapeGrid();
 buildEdgeSliders();
