@@ -97,6 +97,14 @@
   .shape-btn-label{font-size:9.5px;font-weight:600;color:var(--text-mid);text-align:center;line-height:1.2}
   .shape-btn.active .shape-btn-label{color:var(--accent)}
   #edge-sliders .slider-row{margin-bottom:14px}
+  .texture-zone{margin-top:12px;border:2px dashed var(--border);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;background:var(--input-bg)}
+  .texture-zone:hover,.texture-zone.dragover{border-color:var(--accent);background:var(--accent-bg)}
+  .texture-zone-label{font-size:11px;color:var(--text-light);line-height:1.5;pointer-events:none}
+  .texture-zone-label strong{color:var(--text-mid);font-weight:600}
+  .texture-preview{width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:8px;display:none;image-rendering:pixelated}
+  .texture-actions{display:flex;gap:6px;justify-content:center;margin-top:8px}
+  .texture-actions button{font-family:'Outfit',sans-serif;font-size:11px;font-weight:500;padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:var(--panel-bg);color:var(--text-mid);cursor:pointer;transition:all .15s}
+  .texture-actions button:hover{border-color:var(--accent);color:var(--accent)}
 </style>
 </head>
 <body>
@@ -146,8 +154,38 @@
           <div class="finish-swatch" data-finish="stucco-ss" data-color="#b8bcc0"><div class="swatch-circle" style="background:linear-gradient(135deg,#b8bcc0,#d4d8dc)"></div><div class="swatch-label">Stucco Stainless</div></div>
           <div class="finish-swatch" data-finish="stainless" data-color="#d0d4d8"><div class="swatch-circle" style="background:linear-gradient(135deg,#a8aeb4,#e0e4e8,#a8aeb4)"></div><div class="swatch-label">Stainless Steel</div></div>
           <div class="finish-swatch" data-finish="white" data-color="#f0f0f0"><div class="swatch-circle" style="background:#f0f0f0;border:1px solid #ddd"></div><div class="swatch-label">White Coated</div></div>
+          <div class="finish-swatch" data-finish="custom-texture" data-color="#cccccc"><div class="swatch-circle" style="background:repeating-conic-gradient(#ccc 0% 25%,#fff 0% 50%) 50%/16px 16px"></div><div class="swatch-label">Custom Texture</div></div>
         </div>
         <div class="color-row"><div class="color-preview"><input type="color" id="custom-color" value="#c4c8cc"></div><span class="color-text" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-mid)">Custom finish color</span></div>
+        <div class="section-label" style="margin-top:16px">Panel Texture</div>
+        <div class="texture-zone" id="texture-zone">
+          <img class="texture-preview" id="texture-preview" alt="Texture">
+          <div class="texture-zone-label" id="texture-zone-label">
+            <strong>Drop image here</strong><br>
+            or click to upload · paste from clipboard
+          </div>
+          <input type="file" id="texture-file" accept="image/*" style="display:none">
+          <div class="texture-actions" id="texture-actions" style="display:none">
+            <button id="texture-remove">Remove</button>
+            <button id="texture-replace">Replace</button>
+          </div>
+        </div>
+        <div id="texture-controls" style="display:none;margin-top:12px">
+          <div class="slider-row"><div class="slider-header"><span style="font-size:13px;font-weight:500">Texture Scale</span><span class="slider-value" id="val-tex-scale">1.0x</span></div><div class="slider-track"><input type="range" id="tex-scale" min="0.1" max="5" step="0.1" value="1"></div><div class="slider-range-labels"><span>0.1x</span><span>5.0x</span></div></div>
+          <div class="slider-row"><div class="slider-header"><span style="font-size:13px;font-weight:500">Rotation</span><span class="slider-value" id="val-tex-rotation">0°</span></div><div class="slider-track"><input type="range" id="tex-rotation" min="0" max="360" step="1" value="0"></div><div class="slider-range-labels"><span>0°</span><span>360°</span></div></div>
+          <div style="margin-top:8px"><span style="font-size:13px;font-weight:500;color:var(--text-dark)">Fit Mode</span>
+            <div class="toggle-group" style="margin-top:6px">
+              <button class="toggle-option active" data-val="tile" id="tex-fit-tile">Tile</button>
+              <button class="toggle-option" data-val="cover" id="tex-fit-cover">Cover</button>
+              <button class="toggle-option" data-val="contain" id="tex-fit-contain">Contain</button>
+            </div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:16px">
+            <div class="check-row" style="flex:1;margin:0"><span class="check-label">Repeat X</span><div class="switch"><input type="checkbox" id="tex-repeat-x" checked><label for="tex-repeat-x" class="switch-track"></label></div></div>
+            <div class="check-row" style="flex:1;margin:0"><span class="check-label">Repeat Y</span><div class="switch"><input type="checkbox" id="tex-repeat-y" checked><label for="tex-repeat-y" class="switch-track"></label></div></div>
+          </div>
+          <div class="slider-row" style="margin-top:10px"><div class="slider-header"><span style="font-size:13px;font-weight:500">Tile Spacing</span><span class="slider-value" id="val-tex-gap">0px</span></div><div class="slider-track"><input type="range" id="tex-gap" min="0" max="20" step="1" value="0"></div><div class="slider-range-labels"><span>0</span><span>20px</span></div></div>
+        </div>
       </div>
       <div class="panel-section"><div class="section-label">Compartment Height (DIM A)</div><div class="slider-row"><div class="slider-header"><span></span><span class="slider-value" id="val-height">8' 4"</span></div><div class="slider-track"><input type="range" id="slider-height" min="90" max="120" step="2" value="100"></div><div class="slider-range-labels"><span>7' 6"</span><span>10' 0"</span></div></div></div>
       <div class="panel-section"><div class="section-label">Add Floor in Compartment?</div><select class="custom-select" id="floor-select"><option value="standard">Standard Floor (600lbs per sq ft) NO ROLLING TRAFFIC</option><option value="heavy">Heavy-Duty Floor (1000lbs per sq ft)</option><option value="reinforced">Reinforced Floor - Forklift Rated</option><option value="none">No Floor (Existing Concrete)</option></select></div>
@@ -246,6 +284,7 @@ const S = {
   doorWidth:34, doorOffset:19, doorSwing:'right',
   floor:'standard', ramp:'interior',
   autoRotate:false, showDims:true, wireframe:false,
+  texScale:1, texRotation:0, texFit:'tile', texRepeatX:true, texRepeatY:true, texGap:0,
 };
 // Deep copy of current shape points (user can adjust edges)
 let shapePoints = JSON.parse(JSON.stringify(SHAPES[S.shape]));
@@ -281,9 +320,53 @@ const ctrl=new THREE.OrbitControls(camera,renderer.domElement);ctrl.target.set(0
 const cooler=new THREE.Group();scene.add(cooler);
 const dimGroup=new THREE.Group();cooler.add(dimGroup);
 const extMat=new THREE.MeshStandardMaterial({color:S.finishColor,roughness:.55,metalness:.15});
+const intMat=new THREE.MeshStandardMaterial({color:0xf5f3eb,roughness:.4,metalness:.05}); // interior white
+const floorMat=new THREE.MeshStandardMaterial({color:0xb8bcc0,roughness:.7,metalness:.1}); // floor - no texture
 const edgeMat=new THREE.LineBasicMaterial({color:0x888888,transparent:true,opacity:.22});
 const dimLineMat=new THREE.LineBasicMaterial({color:0xdd3333});
 const panelMeshes=[];
+const panelExtMats=[]; // per-panel exterior materials for uniform texture sizing
+
+// Create a per-panel exterior material with texture repeat based on real-world panel size
+function makeExtMatForPanel(widthFt,heightFt){
+  const mat=extMat.clone();
+  if(extMat.map&&S.finish==='custom-texture'){
+    const tex=extMat.map.clone();
+    // Base tile size: 4 feet at scale 1.0
+    const baseTile=4/S.texScale;
+    const repX=widthFt/baseTile;
+    const repY=heightFt/baseTile;
+    if(S.texFit==='tile'){
+      tex.wrapS=S.texRepeatX?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
+      tex.wrapT=S.texRepeatY?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
+      tex.repeat.set(repX,repY);
+    } else if(S.texFit==='cover'){
+      tex.wrapS=THREE.ClampToEdgeWrapping;
+      tex.wrapT=THREE.ClampToEdgeWrapping;
+      const maxRep=Math.max(repX,repY);
+      tex.repeat.set(maxRep,maxRep);
+    } else {
+      tex.wrapS=THREE.ClampToEdgeWrapping;
+      tex.wrapT=THREE.ClampToEdgeWrapping;
+      const minRep=Math.min(repX,repY);
+      tex.repeat.set(minRep,minRep);
+      tex.offset.set((1-minRep/repX)/2,(1-minRep/repY)/2);
+    }
+    tex.rotation=S.texRotation*Math.PI/180;
+    tex.center.set(.5,.5);
+    // Gap: add padding by scaling down the UV slightly
+    if(S.texGap>0){
+      const gapFrac=S.texGap/256; // gap as fraction of texture
+      tex.repeat.x*=(1+gapFrac);
+      tex.repeat.y*=(1+gapFrac);
+    }
+    tex.needsUpdate=true;
+    mat.map=tex;
+  }
+  mat.needsUpdate=true;
+  panelExtMats.push(mat);
+  return mat;
+}
 
 function clearGroup(g){while(g.children.length){const c=g.children[0];if(c.geometry)c.geometry.dispose();if(c.material&&c.material!==extMat&&c.material!==edgeMat&&c.material!==dimLineMat){if(Array.isArray(c.material))c.material.forEach(m=>m.dispose());else c.material.dispose()}g.remove(c)}}
 function addMesh(geo,mat,x,y,z){const m=new THREE.Mesh(geo,mat||extMat);m.position.set(x||0,y||0,z||0);m.castShadow=true;m.receiveShadow=true;cooler.add(m);const eg=new THREE.EdgesGeometry(geo);const ln=new THREE.LineSegments(eg,edgeMat);ln.position.copy(m.position);cooler.add(ln);return m}
@@ -352,7 +435,9 @@ function getPanelLetter(edgeIdx,pts,segment){
 function build(){
   clearGroup(dimGroup);clearGroup(cooler);cooler.add(dimGroup);
   dimGroup.visible=S.showDims;
-  panelMeshes.length=0; // clear panel tracking
+  panelMeshes.length=0;
+  panelExtMats.forEach(m=>{if(m.map)m.map.dispose();m.dispose()});
+  panelExtMats.length=0;
   const pts=shapePoints;
   const H=In(S.height),T=In(S.wallT);
   const floorT=T*.6,hasFloor=S.floor!=='none',fTop=hasFloor?floorT:0;
@@ -407,7 +492,7 @@ function build(){
     floorShape.closePath();
     const floorGeo=new THREE.ExtrudeGeometry(floorShape,{depth:floorT,bevelEnabled:false});
     floorGeo.rotateX(-Math.PI/2);
-    const floorMesh=new THREE.Mesh(floorGeo,extMat);
+    const floorMesh=new THREE.Mesh(floorGeo,floorMat);
     floorMesh.position.y=floorT;
     floorMesh.castShadow=true;floorMesh.receiveShadow=true;
     cooler.add(floorMesh);
@@ -485,10 +570,6 @@ function build(){
     const [nx,nz]=edgeNormal(a,b);
 
     if(isHoriz){
-      // Panel runs along X between the inner edges of the two posts
-      // Post A inner X edge: postA.x + signX towards center? No...
-      // Post A's X range: [postA.px, postA.px + signX*T]
-      // Panel starts at the inner X edge of post A and ends at inner X edge of post B
       const postA_innerX=postA.px + postA.signX*T;
       const postB_innerX=postB.px + postB.signX*T;
       const x1=Math.min(postA_innerX,postB_innerX);
@@ -498,7 +579,9 @@ function build(){
       const midX=(x1+x2)/2;
       const midZ=(a[1]+b[1])/2 - nz*T/2;
       const wallGeo=new THREE.BoxGeometry(panelW,wallH,T);
-      const wall=new THREE.Mesh(wallGeo,extMat);
+      const pMat=makeExtMatForPanel(panelW,wallH);
+      const mats=[intMat,intMat,intMat,intMat,nz>0?pMat:intMat,nz<0?pMat:intMat];
+      const wall=new THREE.Mesh(wallGeo,mats);
       wall.position.set(midX,fTop+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
       wall.userData={panelLetter:getPanelLetter(i,shapePoints),edgeIdx:i};
@@ -506,7 +589,6 @@ function build(){
       const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
       eg.position.copy(wall.position);cooler.add(eg);
     } else {
-      // Panel runs along Z between the inner edges of the two posts
       const postA_innerZ=postA.pz + postA.signZ*T;
       const postB_innerZ=postB.pz + postB.signZ*T;
       const z1=Math.min(postA_innerZ,postB_innerZ);
@@ -516,7 +598,9 @@ function build(){
       const midZ=(z1+z2)/2;
       const midX=(a[0]+b[0])/2 - nx*T/2;
       const wallGeo=new THREE.BoxGeometry(T,wallH,panelD);
-      const wall=new THREE.Mesh(wallGeo,extMat);
+      const pMat=makeExtMatForPanel(panelD,wallH);
+      const mats=[nx>0?pMat:intMat,nx<0?pMat:intMat,intMat,intMat,intMat,intMat];
+      const wall=new THREE.Mesh(wallGeo,mats);
       wall.position.set(midX,fTop+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
       wall.userData={panelLetter:getPanelLetter(i,shapePoints),edgeIdx:i};
@@ -555,7 +639,9 @@ function build(){
     const leftSegW=doorLeftX-frameW-leftX;
     if(leftSegW>.01){
       const lsg=new THREE.BoxGeometry(leftSegW,wallH,T);
-      const lsm=new THREE.Mesh(lsg,extMat);
+      const lPMat=makeExtMatForPanel(leftSegW,wallH);
+      const lMats=[intMat,intMat,intMat,intMat,lPMat,intMat]; // +Z is exterior (front wall faces +Z)
+      const lsm=new THREE.Mesh(lsg,lMats);
       lsm.position.set(leftX+leftSegW/2,fTop+wallH/2,wallCenterZ);
       lsm.castShadow=true;lsm.receiveShadow=true;cooler.add(lsm);
       lsm.userData={panelLetter:getPanelLetter(bestEdge,shapePoints,'left'),edgeIdx:bestEdge,segment:'left'};
@@ -566,7 +652,9 @@ function build(){
     const rightSegW=rightX-(doorRightX+frameW);
     if(rightSegW>.01){
       const rsg=new THREE.BoxGeometry(rightSegW,wallH,T);
-      const rsm=new THREE.Mesh(rsg,extMat);
+      const rPMat=makeExtMatForPanel(rightSegW,wallH);
+      const rMats=[intMat,intMat,intMat,intMat,rPMat,intMat];
+      const rsm=new THREE.Mesh(rsg,rMats);
       rsm.position.set(doorRightX+frameW+rightSegW/2,fTop+wallH/2,wallCenterZ);
       rsm.castShadow=true;rsm.receiveShadow=true;cooler.add(rsm);
       rsm.userData={panelLetter:getPanelLetter(bestEdge,shapePoints,'right'),edgeIdx:bestEdge,segment:'right'};
@@ -641,11 +729,199 @@ function updateMat(){
   extMat.color.set(S.finishColor);
   if(S.finish==='stainless'){extMat.metalness=.6;extMat.roughness=.25}
   else if(S.finish==='galvanized'){extMat.metalness=.35;extMat.roughness=.45}
+  else if(S.finish==='custom-texture'){extMat.metalness=.05;extMat.roughness=.5;extMat.color.set(0xffffff)} // neutral white so texture shows true color
   else if(S.finish.includes('stucco')){extMat.metalness=.15;extMat.roughness=.55}
   else{extMat.metalness=.1;extMat.roughness=.6}
   extMat.wireframe=S.wireframe;extMat.needsUpdate=true;
 }
 function updateSliders(){document.getElementById('val-height').textContent=fmtFtIn(S.height)}
+
+// ═══════════════════════════════════════════════════════
+// Panel Texture System
+// ═══════════════════════════════════════════════════════
+let currentTexture=null;
+let textureImageData=null; // store the canvas for re-applying after rebuild
+
+function makeCheckerTexture(size){
+  const c=document.createElement('canvas');c.width=size;c.height=size;
+  const ctx=c.getContext('2d');
+  const sq=size/8;
+  for(let y=0;y<8;y++){for(let x=0;x<8;x++){
+    ctx.fillStyle=(x+y)%2===0?'#d4d4d4':'#ffffff';
+    ctx.fillRect(x*sq,y*sq,sq,sq);
+  }}
+  return c;
+}
+
+function applyTexture(canvas){
+  if(currentTexture){currentTexture.dispose();currentTexture=null}
+  const tex=new THREE.CanvasTexture(canvas);
+  tex.minFilter=THREE.LinearMipmapLinearFilter;
+  tex.magFilter=THREE.LinearFilter;
+  currentTexture=tex;
+  textureImageData=canvas;
+  updateTextureSettings();
+  extMat.map=tex;
+  extMat.needsUpdate=true;
+}
+
+function updateTextureSettings(){
+  if(!currentTexture)return;
+  const tex=currentTexture;
+  // Fit mode
+  if(S.texFit==='tile'){
+    tex.wrapS=S.texRepeatX?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
+    tex.wrapT=S.texRepeatY?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
+    tex.repeat.set(S.texScale*(S.texRepeatX?1:1), S.texScale*(S.texRepeatY?1:1));
+  } else if(S.texFit==='cover'){
+    tex.wrapS=THREE.ClampToEdgeWrapping;
+    tex.wrapT=THREE.ClampToEdgeWrapping;
+    tex.repeat.set(S.texScale,S.texScale);
+  } else { // contain
+    tex.wrapS=THREE.ClampToEdgeWrapping;
+    tex.wrapT=THREE.ClampToEdgeWrapping;
+    tex.repeat.set(S.texScale,S.texScale);
+    tex.offset.set((1-S.texScale)/2,(1-S.texScale)/2);
+  }
+  // Rotation (degrees to radians, around center)
+  tex.rotation=S.texRotation*Math.PI/180;
+  tex.center.set(.5,.5);
+  tex.needsUpdate=true;
+  extMat.needsUpdate=true;
+}
+
+function removeTexture(){
+  if(currentTexture){currentTexture.dispose();currentTexture=null}
+  textureImageData=null;
+  extMat.map=null;
+  extMat.needsUpdate=true;
+  document.getElementById('texture-preview').style.display='none';
+  document.getElementById('texture-zone-label').style.display='';
+  document.getElementById('texture-actions').style.display='none';
+}
+
+function loadTextureFromImage(src){
+  const img=new Image();
+  img.onload=function(){
+    const maxSize=512;
+    const ratio=Math.min(maxSize/img.width,maxSize/img.height,1);
+    const w=Math.round(img.width*ratio),h=Math.round(img.height*ratio);
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    applyTexture(c);
+    const preview=document.getElementById('texture-preview');
+    preview.src=c.toDataURL('image/jpeg',0.7);
+    preview.style.display='block';
+    document.getElementById('texture-zone-label').style.display='none';
+    document.getElementById('texture-actions').style.display='flex';
+    build();
+  };
+  if(typeof src==='string')img.src=src;
+  else{const r=new FileReader();r.onload=e=>{img.src=e.target.result};r.readAsDataURL(src)}
+}
+
+function applyDefaultTexture(){
+  const cc=makeCheckerTexture(256);
+  applyTexture(cc);
+  const preview=document.getElementById('texture-preview');
+  preview.src=cc.toDataURL();
+  preview.style.display='block';
+  document.getElementById('texture-zone-label').style.display='none';
+  document.getElementById('texture-actions').style.display='flex';
+}
+
+// Show/hide texture zone based on finish selection
+function updateTextureZoneVisibility(){
+  const zone=document.getElementById('texture-zone');
+  const controls=document.getElementById('texture-controls');
+  const label=zone.previousElementSibling;
+  if(S.finish==='custom-texture'){
+    zone.style.display='';
+    controls.style.display='';
+    if(label)label.style.display='';
+    if(!textureImageData)applyDefaultTexture();
+    else applyTexture(textureImageData);
+    build();
+  } else {
+    zone.style.display='none';
+    controls.style.display='none';
+    if(label)label.style.display='none';
+    if(extMat.map){extMat.map=null;extMat.needsUpdate=true}
+    build();
+  }
+}
+
+// UI Handlers
+const textureZone=document.getElementById('texture-zone');
+const textureFile=document.getElementById('texture-file');
+
+textureZone.addEventListener('click',e=>{
+  if(e.target.id==='texture-remove'||e.target.id==='texture-replace')return;
+  textureFile.click();
+});
+textureFile.addEventListener('change',e=>{
+  if(e.target.files&&e.target.files[0])loadTextureFromImage(e.target.files[0]);
+});
+textureZone.addEventListener('dragover',e=>{e.preventDefault();textureZone.classList.add('dragover')});
+textureZone.addEventListener('dragleave',()=>textureZone.classList.remove('dragover'));
+textureZone.addEventListener('drop',e=>{
+  e.preventDefault();textureZone.classList.remove('dragover');
+  if(e.dataTransfer.files&&e.dataTransfer.files[0])loadTextureFromImage(e.dataTransfer.files[0]);
+});
+document.addEventListener('paste',e=>{
+  if(S.finish!=='custom-texture')return; // only paste when custom texture is active
+  const items=e.clipboardData&&e.clipboardData.items;
+  if(!items)return;
+  for(let i=0;i<items.length;i++){
+    if(items[i].type.indexOf('image')>=0){
+      const blob=items[i].getAsFile();
+      if(blob)loadTextureFromImage(blob);
+      break;
+    }
+  }
+});
+document.getElementById('texture-remove').addEventListener('click',e=>{
+  e.stopPropagation();removeTexture();build();
+});
+document.getElementById('texture-replace').addEventListener('click',e=>{
+  e.stopPropagation();textureFile.click();
+});
+
+// Texture control handlers
+document.getElementById('tex-scale').addEventListener('input',e=>{
+  S.texScale=parseFloat(e.target.value);
+  document.getElementById('val-tex-scale').textContent=S.texScale.toFixed(1)+'x';
+  updateTextureSettings();build();
+});
+document.getElementById('tex-rotation').addEventListener('input',e=>{
+  S.texRotation=parseInt(e.target.value);
+  document.getElementById('val-tex-rotation').textContent=S.texRotation+'°';
+  updateTextureSettings();build();
+});
+['tex-fit-tile','tex-fit-cover','tex-fit-contain'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',function(){
+    ['tex-fit-tile','tex-fit-cover','tex-fit-contain'].forEach(i=>document.getElementById(i).classList.remove('active'));
+    this.classList.add('active');
+    S.texFit=this.dataset.val;
+    updateTextureSettings();build();
+  });
+});
+document.getElementById('tex-repeat-x').addEventListener('change',e=>{
+  S.texRepeatX=e.target.checked;
+  updateTextureSettings();build();
+});
+document.getElementById('tex-repeat-y').addEventListener('change',e=>{
+  S.texRepeatY=e.target.checked;
+  updateTextureSettings();build();
+});
+document.getElementById('tex-gap').addEventListener('input',e=>{
+  S.texGap=parseInt(e.target.value);
+  document.getElementById('val-tex-gap').textContent=S.texGap+'px';
+  updateTextureSettings();build();
+});
+
+// Hide texture zone on initial load (not custom-texture by default)
+updateTextureZoneVisibility();
 
 // ═══════════════════════════════════════════════════════
 // Shape selector UI (SVG thumbnails)
@@ -1083,7 +1359,7 @@ setupToggle(['type-outdoor','type-indoor'],'type',()=>{
 setupToggle(['temp-cooler','temp-freezer'],'temperature',()=>pushUndo());
 setupToggle(['ramp-interior','ramp-exterior','ramp-none'],'ramp',()=>{build();pushUndo()});
 
-document.querySelectorAll('.finish-swatch').forEach(sw=>{sw.addEventListener('click',()=>{document.querySelectorAll('.finish-swatch').forEach(s=>s.classList.remove('active'));sw.classList.add('active');S.finish=sw.dataset.finish;S.finishColor=sw.dataset.color;document.getElementById('custom-color').value=S.finishColor;updateMat();build();pushUndo()})});
+document.querySelectorAll('.finish-swatch').forEach(sw=>{sw.addEventListener('click',()=>{document.querySelectorAll('.finish-swatch').forEach(s=>s.classList.remove('active'));sw.classList.add('active');S.finish=sw.dataset.finish;S.finishColor=sw.dataset.color;document.getElementById('custom-color').value=S.finishColor;updateMat();updateTextureZoneVisibility();pushUndo()})});
 document.getElementById('custom-color').addEventListener('change',e=>{S.finishColor=e.target.value;document.querySelectorAll('.finish-swatch').forEach(s=>s.classList.remove('active'));updateMat();build();pushUndo()});
 document.getElementById('custom-color').addEventListener('input',e=>{S.finishColor=e.target.value;updateMat();build()});
 document.getElementById('slider-height').addEventListener('input',e=>{S.height=parseInt(e.target.value);updateSliders();build()});
