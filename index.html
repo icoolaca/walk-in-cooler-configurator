@@ -123,6 +123,7 @@
     <button class="tool-btn" title="Redo (Ctrl+Y)" id="btn-redo" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg></button>
     <button class="tool-btn" title="Fullscreen" id="btn-fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
     <button class="tool-btn" title="Play Auto-Rotate" id="btn-auto-rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="icon-pause" style="display:none"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="icon-play"><polygon points="6,4 20,12 6,20"/></svg></button>
+    <button class="tool-btn" title="Orbit Light" id="btn-light-orbit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
     <div style="flex:1"></div>
     <button class="tool-btn" title="Reset View" id="btn-reset-view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 3 3 9 9 9"/></svg></button>
     <button class="tool-btn" title="Save Screenshot" id="btn-screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
@@ -205,7 +206,7 @@
       function pU(dist,m){const v=new THREE.Vector3();v.setFromMatrixColumn(m,1);v.multiplyScalar(dist);panOff.add(v)}
       function pan(dx,dy){const el=sc.dom,off=new THREE.Vector3().copy(sc.object.position).sub(sc.target);let td=off.length()*Math.tan(sc.object.fov/2*Math.PI/180);pL(2*dx*td/el.clientHeight,sc.object.matrix);pU(2*dy*td/el.clientHeight,sc.object.matrix)}
       this.update=function(){const off=new THREE.Vector3();off.copy(sc.object.position).sub(sc.target);sph.setFromVector3(off);sph.theta+=sphD.theta;sph.phi+=sphD.phi;sph.phi=Math.max(sc.minPolar,Math.min(sc.maxPolar,sph.phi));sph.radius*=scale;sph.radius=Math.max(sc.minDist,Math.min(sc.maxDist,sph.radius));sc.target.add(panOff);off.setFromSpherical(sph);sc.object.position.copy(sc.target).add(off);sc.object.lookAt(sc.target);if(sc.enableDamping){sphD.theta*=(1-sc.dampFactor);sphD.phi*=(1-sc.dampFactor)}else sphD.set(0,0,0);panOff.set(0,0,0);scale=1};
-      this.reset=function(){sc.target.set(0,3.5,0);sc.object.position.set(14,11,18);sc.update()};
+      this.reset=function(){sc.target.set(0,3.5,0);sc.object.position.set(28,22,36);sc.update()};
       d.addEventListener('pointerdown',e=>{if(!sc.enabled)return;if(e.button===0)state=ST.ROT;else if(e.button===1)state=ST.DOLLY;else if(e.button===2)state=ST.PAN;ps.set(e.clientX,e.clientY);d.setPointerCapture(e.pointerId)});
       d.addEventListener('pointermove',e=>{if(!sc.enabled||state===ST.NONE)return;pe.set(e.clientX,e.clientY);const delta=new THREE.Vector2().subVectors(pe,ps),el=sc.dom;if(state===ST.ROT){rL(2*Math.PI*delta.x/el.clientHeight*sc.rotSpeed);rU(2*Math.PI*delta.y/el.clientHeight*sc.rotSpeed)}else if(state===ST.PAN)pan(delta.x,delta.y);ps.copy(pe)});
       d.addEventListener('pointerup',e=>{state=ST.NONE;d.releasePointerCapture(e.pointerId)});
@@ -258,7 +259,7 @@ const fmtIn=i=>Math.round(i)+'"';
 // ═══════════════════════════════════════════════════════
 const container=document.getElementById('canvas-area');
 const scene=new THREE.Scene();scene.background=new THREE.Color(0xd8dce3);
-const camera=new THREE.PerspectiveCamera(40,1,.1,200);camera.position.set(14,11,18);
+const camera=new THREE.PerspectiveCamera(40,1,.1,200);camera.position.set(28,22,36);
 const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -316,6 +317,38 @@ function addDim(p1,p2,label,offV,sc2){
 // ═══════════════════════════════════════════════════════
 // BUILD (per-panel wall construction)
 // ═══════════════════════════════════════════════════════
+// Helper: find door wall edge index
+function getDoorEdge(pts){
+  let doorEdge=-1,dLen=0;
+  let cx2=0,cz2=0;
+  pts.forEach(p=>{cx2+=p[0];cz2+=p[1]});cx2/=pts.length;cz2/=pts.length;
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i],b=pts[(i+1)%pts.length];
+    const dx=b[0]-a[0],dz=b[1]-a[1];
+    const el=Math.sqrt(dx*dx+dz*dz);
+    const ih=Math.abs(dx)>Math.abs(dz)*2;
+    let nx=dz,nz=-dx;const nl=Math.sqrt(nx*nx+nz*nz)||1;nx/=nl;nz/=nl;
+    const mx=(a[0]+b[0])/2,mz=(a[1]+b[1])/2;
+    if(nx*(mx-cx2)+nz*(mz-cz2)<0){nx=-nx;nz=-nz}
+    if(ih&&nz>.5&&el>dLen){dLen=el;doorEdge=i}
+  }
+  return doorEdge>=0?doorEdge:0;
+}
+
+// Helper: get panel letter for an edge index
+// Door wall = A (left) + B (right), then continuing clockwise from right:
+// next wall to the right = C, back wall = D, left wall = E, etc.
+function getPanelLetter(edgeIdx,pts,segment){
+  const doorEdge=getDoorEdge(pts);
+  const n=pts.length;
+  if(edgeIdx===doorEdge){
+    return segment==='right'?'B':'A';
+  }
+  // Counter-clockwise: go backward from door wall
+  const offset=(doorEdge-edgeIdx+n)%n;
+  return String.fromCharCode(65+offset+1); // +1 because door uses A and B
+}
+
 function build(){
   clearGroup(dimGroup);clearGroup(cooler);cooler.add(dimGroup);
   dimGroup.visible=S.showDims;
@@ -468,7 +501,7 @@ function build(){
       const wall=new THREE.Mesh(wallGeo,extMat);
       wall.position.set(midX,fTop+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
-      wall.userData={panelLetter:String.fromCharCode(65+i),edgeIdx:i};
+      wall.userData={panelLetter:getPanelLetter(i,shapePoints),edgeIdx:i};
       panelMeshes.push(wall);
       const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
       eg.position.copy(wall.position);cooler.add(eg);
@@ -486,7 +519,7 @@ function build(){
       const wall=new THREE.Mesh(wallGeo,extMat);
       wall.position.set(midX,fTop+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
-      wall.userData={panelLetter:String.fromCharCode(65+i),edgeIdx:i};
+      wall.userData={panelLetter:getPanelLetter(i,shapePoints),edgeIdx:i};
       panelMeshes.push(wall);
       const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
       eg.position.copy(wall.position);cooler.add(eg);
@@ -519,14 +552,13 @@ function build(){
     const frameW=In(2); // 2" frame on each side
 
     // ── Split front wall into: left segment | door gap | right segment ──
-    const frontLetter=String.fromCharCode(65+bestEdge);
     const leftSegW=doorLeftX-frameW-leftX;
     if(leftSegW>.01){
       const lsg=new THREE.BoxGeometry(leftSegW,wallH,T);
       const lsm=new THREE.Mesh(lsg,extMat);
       lsm.position.set(leftX+leftSegW/2,fTop+wallH/2,wallCenterZ);
       lsm.castShadow=true;lsm.receiveShadow=true;cooler.add(lsm);
-      lsm.userData={panelLetter:frontLetter,edgeIdx:bestEdge,segment:'left'};
+      lsm.userData={panelLetter:getPanelLetter(bestEdge,shapePoints,'left'),edgeIdx:bestEdge,segment:'left'};
       panelMeshes.push(lsm);
       const leg=new THREE.LineSegments(new THREE.EdgesGeometry(lsg),edgeMat);
       leg.position.copy(lsm.position);cooler.add(leg);
@@ -537,7 +569,7 @@ function build(){
       const rsm=new THREE.Mesh(rsg,extMat);
       rsm.position.set(doorRightX+frameW+rightSegW/2,fTop+wallH/2,wallCenterZ);
       rsm.castShadow=true;rsm.receiveShadow=true;cooler.add(rsm);
-      rsm.userData={panelLetter:frontLetter,edgeIdx:bestEdge,segment:'right'};
+      rsm.userData={panelLetter:getPanelLetter(bestEdge,shapePoints,'right'),edgeIdx:bestEdge,segment:'right'};
       panelMeshes.push(rsm);
       const reg=new THREE.LineSegments(new THREE.EdgesGeometry(rsg),edgeMat);
       reg.position.copy(rsm.position);cooler.add(reg);
@@ -753,11 +785,29 @@ function drawFloorPlan(){
     ctx.fillText(txt,labelX,labelY);
 
     // Panel letter label (inward, inside the polygon)
-    const panelLetter=String.fromCharCode(65+i);
-    const inX=mx-nx*14,inY=my-ny*14; // opposite direction = inward
-    ctx.font='bold 10px Outfit, sans-serif';
-    ctx.fillStyle='rgba(8,145,178,0.6)';
-    ctx.fillText('Panel '+panelLetter,inX,inY);
+    const doorEdgeI=getDoorEdge(pts);
+    if(i===doorEdgeI){
+      // Door wall: show A on left side, B on right side
+      const doorLX=Math.min(pts[i][0],pts[(i+1)%pts.length][0]);
+      const doorOff2=S.doorOffset;
+      const doorW2=S.doorWidth;
+      const doorMidX=doorLX+doorOff2+doorW2/2;
+      const doorMidC=tr.toCanvas([doorMidX,pts[i][1]]);
+      // Left of door = Panel A
+      const leftMidX=(ac[0]+doorMidC[0])/2;
+      ctx.font='bold 10px Outfit, sans-serif';
+      ctx.fillStyle='rgba(8,145,178,0.7)';
+      ctx.fillText('Panel A',leftMidX,my-ny*14);
+      // Right of door = Panel B
+      const rightMidX=(doorMidC[0]+bc[0])/2;
+      ctx.fillText('Panel B',rightMidX,my-ny*14);
+    } else {
+      const panelLetter=getPanelLetter(i,pts);
+      const inX2=mx-nx*14,inY2=my-ny*14;
+      ctx.font='bold 10px Outfit, sans-serif';
+      ctx.fillStyle='rgba(8,145,178,0.6)';
+      ctx.fillText('Panel '+panelLetter,inX2,inY2);
+    }
     ctx.font='bold 11px IBM Plex Mono, monospace'; // restore font
   }
 
@@ -1115,8 +1165,7 @@ renderer.domElement.addEventListener('pointermove',e=>{
       const idx=hit.userData.edgeIdx;
       const a=pts2[idx],b=pts2[(idx+1)%pts2.length];
       const edgeLen=Math.round(Math.sqrt((b[0]-a[0])**2+(b[1]-a[1])**2));
-      const seg=hit.userData.segment?` (${hit.userData.segment})`:'';
-      tooltip.textContent=`Panel ${hit.userData.panelLetter}${seg} · ${edgeLen}"`;
+      tooltip.textContent=`Panel ${hit.userData.panelLetter} · ${edgeLen}"`;
       tooltip.style.display='block';
       tooltip.style.left=(e.clientX-rect.left+12)+'px';
       tooltip.style.top=(e.clientY-rect.top-30)+'px';
@@ -1129,10 +1178,25 @@ renderer.domElement.addEventListener('pointerleave',()=>{
   tooltip.style.display='none';
 });
 
+// Light orbit toggle
+let lightOrbit=false;
+let lightAngle=0;
+const btnLO=document.getElementById('btn-light-orbit');
+btnLO.addEventListener('click',()=>{
+  lightOrbit=!lightOrbit;
+  btnLO.classList.toggle('active',lightOrbit);
+  btnLO.title=lightOrbit?'Stop Light Orbit':'Orbit Light';
+});
+
 // Render loop
 (function animate(){
   requestAnimationFrame(animate);
   if(S.autoRotate)cooler.rotation.y+=.003;
+  if(lightOrbit){
+    lightAngle+=.008;
+    const lr=18;
+    dL.position.set(Math.cos(lightAngle)*lr,18,Math.sin(lightAngle)*lr);
+  }
   ctrl.update();renderer.render(scene,camera);drawGizmo();
 })();
 </script>
