@@ -130,6 +130,7 @@
   <div class="canvas-area" id="canvas-area">
     <canvas id="axis-gizmo" width="120" height="120" style="position:absolute;top:12px;left:12px;z-index:3;pointer-events:none;width:5rem!important;height:5rem!important;"></canvas>
     <div class="support-badge"><button class="badge-btn badge-help">?</button><button class="badge-btn badge-support">Support</button></div>
+    <div id="panel-tooltip" style="position:absolute;display:none;pointer-events:none;z-index:10;background:rgba(15,23,42,0.9);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:6px 12px;border-radius:6px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.2)"></div>
     <div class="bottom-bar"><button><span style="font-size:16px;font-weight:300">+</span> Add Compartments/Refrig/Lights/BlueZone</button></div>
   </div>
   <div class="right-panel" id="right-panel">
@@ -241,7 +242,7 @@ const S = {
   type:'indoor', temperature:'cooler',
   finish:'stucco-aluminum', finishColor:'#c4c8cc',
   shape:'Rectangle', height:100, wallT:4,
-  doorWidth:34, doorOffset:19, doorSwing:'left',
+  doorWidth:34, doorOffset:19, doorSwing:'right',
   floor:'standard', ramp:'interior',
   autoRotate:false, showDims:true, wireframe:false,
 };
@@ -281,6 +282,7 @@ const dimGroup=new THREE.Group();cooler.add(dimGroup);
 const extMat=new THREE.MeshStandardMaterial({color:S.finishColor,roughness:.55,metalness:.15});
 const edgeMat=new THREE.LineBasicMaterial({color:0x888888,transparent:true,opacity:.22});
 const dimLineMat=new THREE.LineBasicMaterial({color:0xdd3333});
+const panelMeshes=[];
 
 function clearGroup(g){while(g.children.length){const c=g.children[0];if(c.geometry)c.geometry.dispose();if(c.material&&c.material!==extMat&&c.material!==edgeMat&&c.material!==dimLineMat){if(Array.isArray(c.material))c.material.forEach(m=>m.dispose());else c.material.dispose()}g.remove(c)}}
 function addMesh(geo,mat,x,y,z){const m=new THREE.Mesh(geo,mat||extMat);m.position.set(x||0,y||0,z||0);m.castShadow=true;m.receiveShadow=true;cooler.add(m);const eg=new THREE.EdgesGeometry(geo);const ln=new THREE.LineSegments(eg,edgeMat);ln.position.copy(m.position);cooler.add(ln);return m}
@@ -317,6 +319,7 @@ function addDim(p1,p2,label,offV,sc2){
 function build(){
   clearGroup(dimGroup);clearGroup(cooler);cooler.add(dimGroup);
   dimGroup.visible=S.showDims;
+  panelMeshes.length=0; // clear panel tracking
   const pts=shapePoints;
   const H=In(S.height),T=In(S.wallT);
   const floorT=T*.6,hasFloor=S.floor!=='none',fTop=hasFloor?floorT:0;
@@ -428,8 +431,20 @@ function build(){
     peg.position.copy(post.position);cooler.add(peg);
   }
 
-  // Step 2: Panels between adjacent posts
+  // Step 2: Panels between adjacent posts (skip front wall - handled by door section)
+  // First, find front wall edge index
+  let bestEdgeIdx=-1,bLen=0;
   for(let i=0;i<fp.length;i++){
+    const a=fp[i],b=fp[(i+1)%fp.length];
+    const ddx=b[0]-a[0],ddz=b[1]-a[1];
+    const el=Math.sqrt(ddx*ddx+ddz*ddz);
+    const ih=Math.abs(ddx)>Math.abs(ddz)*2;
+    const [nnx,nnz]=edgeNormal(a,b);
+    if(ih&&nnz>.5&&el>bLen){bLen=el;bestEdgeIdx=i}
+  }
+
+  for(let i=0;i<fp.length;i++){
+    if(i===bestEdgeIdx)continue; // skip front wall - door section handles it
     const a=fp[i],b=fp[(i+1)%fp.length];
     const postA=postPositions[i],postB=postPositions[(i+1)%fp.length];
     const dx=b[0]-a[0],dz=b[1]-a[1];
@@ -453,6 +468,8 @@ function build(){
       const wall=new THREE.Mesh(wallGeo,extMat);
       wall.position.set(midX,fTop+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
+      wall.userData={panelLetter:String.fromCharCode(65+i),edgeIdx:i};
+      panelMeshes.push(wall);
       const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
       eg.position.copy(wall.position);cooler.add(eg);
     } else {
@@ -469,12 +486,14 @@ function build(){
       const wall=new THREE.Mesh(wallGeo,extMat);
       wall.position.set(midX,fTop+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
+      wall.userData={panelLetter:String.fromCharCode(65+i),edgeIdx:i};
+      panelMeshes.push(wall);
       const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
       eg.position.copy(wall.position);cooler.add(eg);
     }
   }
 
-  // ── Find front wall: longest horizontal edge with outward normal facing +Z ──
+  // ── Find front wall and create door opening ──
   let bestEdge=-1,bestLen=0,bestZ=-Infinity;
   for(let i=0;i<fp.length;i++){
     const a=fp[i],b=fp[(i+1)%fp.length];
@@ -485,43 +504,77 @@ function build(){
     if(isHoriz&&nz>.5&&edgeLen>bestLen){bestLen=edgeLen;bestEdge=i;bestZ=(a[1]+b[1])/2}
   }
 
-  // ── Door assembly (5" thick door on 4" wall) ──
   if(bestEdge>=0){
     const ea=fp[bestEdge],eb=fp[(bestEdge+1)%fp.length];
     const [fnx,fnz]=edgeNormal(ea,eb);
     const dW=In(S.doorWidth),dOff=In(S.doorOffset);
     const dH=Math.min(wallH-.2,6.67);
-    const doorT=In(5); // 5 inch door thickness
+    const doorT=In(5);
     const leftX=Math.min(ea[0],eb[0]);
-    // Wall center Z is inward by T/2 from outside face
+    const rightX=Math.max(ea[0],eb[0]);
     const wallCenterZ=(ea[1]+eb[1])/2-fnz*T/2;
-    const doorCX=leftX+dOff+dW/2;
+    const doorLeftX=leftX+In(S.doorOffset);
+    const doorRightX=doorLeftX+dW;
+    const doorCX=doorLeftX+dW/2;
+    const frameW=In(2); // 2" frame on each side
+
+    // ── Split front wall into: left segment | door gap | right segment ──
+    const frontLetter=String.fromCharCode(65+bestEdge);
+    const leftSegW=doorLeftX-frameW-leftX;
+    if(leftSegW>.01){
+      const lsg=new THREE.BoxGeometry(leftSegW,wallH,T);
+      const lsm=new THREE.Mesh(lsg,extMat);
+      lsm.position.set(leftX+leftSegW/2,fTop+wallH/2,wallCenterZ);
+      lsm.castShadow=true;lsm.receiveShadow=true;cooler.add(lsm);
+      lsm.userData={panelLetter:frontLetter,edgeIdx:bestEdge,segment:'left'};
+      panelMeshes.push(lsm);
+      const leg=new THREE.LineSegments(new THREE.EdgesGeometry(lsg),edgeMat);
+      leg.position.copy(lsm.position);cooler.add(leg);
+    }
+    const rightSegW=rightX-(doorRightX+frameW);
+    if(rightSegW>.01){
+      const rsg=new THREE.BoxGeometry(rightSegW,wallH,T);
+      const rsm=new THREE.Mesh(rsg,extMat);
+      rsm.position.set(doorRightX+frameW+rightSegW/2,fTop+wallH/2,wallCenterZ);
+      rsm.castShadow=true;rsm.receiveShadow=true;cooler.add(rsm);
+      rsm.userData={panelLetter:frontLetter,edgeIdx:bestEdge,segment:'right'};
+      panelMeshes.push(rsm);
+      const reg=new THREE.LineSegments(new THREE.EdgesGeometry(rsg),edgeMat);
+      reg.position.copy(rsm.position);cooler.add(reg);
+    }
+    // Above door segment
+    const aboveH=wallH-dH;
+    if(aboveH>.01){
+      const asg=new THREE.BoxGeometry(dW+frameW*2,aboveH,T);
+      const asm2=new THREE.Mesh(asg,extMat);
+      asm2.position.set(doorCX,fTop+dH+aboveH/2,wallCenterZ);
+      asm2.castShadow=true;cooler.add(asm2);
+      const aeg=new THREE.LineSegments(new THREE.EdgesGeometry(asg),edgeMat);
+      aeg.position.copy(asm2.position);cooler.add(aeg);
+    }
+
+    // Door frame sides
+    const frM=new THREE.MeshStandardMaterial({color:0xe8e8e6,roughness:.4,metalness:.08});
+    [-1,1].forEach(s=>{
+      const fm=new THREE.Mesh(new THREE.BoxGeometry(frameW,dH,doorT),frM);
+      fm.position.set(doorCX+s*(dW/2+frameW/2),fTop+dH/2,wallCenterZ);cooler.add(fm);
+    });
+    // Frame top
+    const tfm=new THREE.Mesh(new THREE.BoxGeometry(dW+frameW*2,frameW,doorT),frM);
+    tfm.position.set(doorCX,fTop+dH+frameW/2,wallCenterZ);cooler.add(tfm);
+
+    // Threshold
+    const thMe=new THREE.Mesh(new THREE.BoxGeometry(dW+frameW*2,.06,doorT),new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:.8}));
+    thMe.position.set(doorCX,fTop+.03,wallCenterZ);cooler.add(thMe);
 
     // Door panel (5" thick)
     const dMat=new THREE.MeshStandardMaterial({color:0xf0f0ee,roughness:.35,metalness:.05});
     const dMe=new THREE.Mesh(new THREE.BoxGeometry(dW,dH,doorT),dMat);
     dMe.position.set(doorCX,fTop+dH/2,wallCenterZ);dMe.castShadow=true;cooler.add(dMe);
 
-    // Frame sides (5" thick)
-    const frM=new THREE.MeshStandardMaterial({color:0xe8e8e6,roughness:.4,metalness:.08});
-    [-1,1].forEach(s=>{
-      const fm=new THREE.Mesh(new THREE.BoxGeometry(.1,dH+.06,doorT),frM);
-      fm.position.set(doorCX+s*(dW/2+.05),fTop+dH/2,wallCenterZ);cooler.add(fm);
-    });
-    // Frame top
-    const tfm=new THREE.Mesh(new THREE.BoxGeometry(dW+.12,.1,doorT),frM);
-    tfm.position.set(doorCX,fTop+dH+.05,wallCenterZ);cooler.add(tfm);
-
-    // Threshold
-    const thMe=new THREE.Mesh(new THREE.BoxGeometry(dW+.02,.06,doorT),new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:.8}));
-    thMe.position.set(doorCX,fTop+.03,wallCenterZ);cooler.add(thMe);
-
-    // Hardware on the outer face
+    // 3 Strap hinges only (right side)
     const chrM=new THREE.MeshStandardMaterial({color:0xd8dce0,roughness:.2,metalness:.75});
-    const chrA=new THREE.MeshStandardMaterial({color:0xc0c4c8,roughness:.25,metalness:.8});
-    const hwZ=wallCenterZ+doorT/2+.01; // front face of door
-
-    // 3 Strap hinges (right side of door)
+    const hwZ=wallCenterZ+doorT/2+.01;
     [.85,.50,.15].forEach(pct=>{
       const hy=fTop+dH*pct;
       const hm=new THREE.Mesh(new THREE.BoxGeometry(.45,.14,.025),chrM);
@@ -529,25 +582,6 @@ function build(){
       const pin=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.16,10),chrM);
       pin.position.set(doorCX+dW/2+.08,hy,hwZ);cooler.add(pin);
     });
-
-    // Handle (left side)
-    const hlx=doorCX-dW/2+dW*.22;
-    const hly=fTop+dH*.42;
-    const mpMe=new THREE.Mesh(new THREE.BoxGeometry(.28,.11,.02),chrM);
-    mpMe.position.set(hlx,hly,hwZ);cooler.add(mpMe);
-    const lvMe=new THREE.Mesh(new THREE.BoxGeometry(.04,.3,.04),chrA);
-    lvMe.position.set(hlx,hly,hwZ+.02);cooler.add(lvMe);
-
-    // Slide bolt (top left)
-    const sbMe=new THREE.Mesh(new THREE.BoxGeometry(.28,.06,.02),chrM);
-    sbMe.position.set(hlx,fTop+dH*.82,hwZ);cooler.add(sbMe);
-
-    // Brand logo
-    const lgM=new THREE.MeshStandardMaterial({color:0x0c3547,roughness:.5,metalness:.1});
-    const lgMe=new THREE.Mesh(new THREE.BoxGeometry(dW*.28,dW*.14,.008),lgM);
-    lgMe.position.set(doorCX,fTop+dH*.63,hwZ+.01);cooler.add(lgMe);
-    const lgSp=makeSprite('ICC ENERGY',28);lgSp.scale.multiplyScalar(.24);
-    lgSp.position.set(doorCX,fTop+dH*.63,hwZ+.04);cooler.add(lgSp);
   }
 
   // ── Dimension lines: outside face measurements (fp = outside face points) ──
@@ -692,7 +726,7 @@ function drawFloorPlan(){
   ctx.strokeStyle='rgba(8,145,178,0.2)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();
   ctx.setLineDash([]);
 
-  // Draw edges with dimension labels
+  // Draw edges with dimension labels and panel letters
   ctx.font='bold 11px IBM Plex Mono, monospace';
   ctx.textAlign='center';ctx.textBaseline='middle';
   for(let i=0;i<pts.length;i++){
@@ -701,15 +735,14 @@ function drawFloorPlan(){
     const dx=b[0]-a[0],dy=b[1]-a[1];
     const edgeLen=Math.round(Math.sqrt(dx*dx+dy*dy));
     if(edgeLen<2)continue;
-    // Midpoint
     const mx=(ac[0]+bc[0])/2,my=(ac[1]+bc[1])/2;
-    // Normal for label offset (outward from centroid)
+    // Outward normal
     let nx=ac[1]-bc[1],ny=bc[0]-ac[0];
     const nl=Math.sqrt(nx*nx+ny*ny)||1;nx/=nl;ny/=nl;
-    // Check outward direction
     if(nx*(mx-centC[0])+ny*(my-centC[1])<0){nx=-nx;ny=-ny}
+
+    // Dimension label (outward)
     const labelX=mx+nx*18,labelY=my+ny*18;
-    // Background
     const txt=edgeLen+'"';
     const tw=ctx.measureText(txt).width;
     ctx.fillStyle='rgba(255,255,255,0.9)';
@@ -718,6 +751,14 @@ function drawFloorPlan(){
     ctx.strokeRect(labelX-tw/2-4,labelY-8,tw+8,16);
     ctx.fillStyle='#1e293b';
     ctx.fillText(txt,labelX,labelY);
+
+    // Panel letter label (inward, inside the polygon)
+    const panelLetter=String.fromCharCode(65+i);
+    const inX=mx-nx*14,inY=my-ny*14; // opposite direction = inward
+    ctx.font='bold 10px Outfit, sans-serif';
+    ctx.fillStyle='rgba(8,145,178,0.6)';
+    ctx.fillText('Panel '+panelLetter,inX,inY);
+    ctx.font='bold 11px IBM Plex Mono, monospace'; // restore font
   }
 
   // ── Draw door position and swing arc ──
@@ -749,46 +790,47 @@ function drawFloorPlan(){
     const dcc=tr.toCanvas([doorCX,wallY2]);
     const doorW_px=Math.abs(drc[0]-dlc[0]);
 
-    // Door opening on wall (gap)
+    // Door opening on wall (red line)
     ctx.strokeStyle='#e11d48';ctx.lineWidth=3;
     ctx.beginPath();ctx.moveTo(dlc[0],dlc[1]);ctx.lineTo(drc[0],drc[1]);ctx.stroke();
 
-    // Door panel (closed position - perpendicular to wall, swinging inward)
-    const swingLeft=S.doorSwing==='left';
-    const hingeC=swingLeft?dlc:drc; // hinge point
-    const freeC=swingLeft?drc:dlc;  // free end (where it swings)
+    // Door panel (closed position along wall)
+    const swingRight=S.doorSwing==='right';
+    const hingeC=swingRight?drc:dlc;
+    const freeC=swingRight?dlc:drc;
 
-    // Draw door panel as a thick line (closed position = along wall)
     ctx.strokeStyle='#e11d48';ctx.lineWidth=4;ctx.lineCap='round';
     ctx.beginPath();ctx.moveTo(hingeC[0],hingeC[1]);ctx.lineTo(freeC[0],freeC[1]);ctx.stroke();
 
-    // Swing arc (90 degree arc inward = toward lower Y in canvas = toward interior)
-    // Interior is toward centroid, so swing direction is from wall toward centroid
+    // Swing arc — outward means AWAY from centroid
+    // Front wall is at max Y of polygon. Centroid is above it (lower canvas Y).
+    // Outward = below the wall = higher canvas Y.
+    const arcRadius=doorW_px;
+    const outwardY=hingeC[1]+(hingeC[1]>centC[1]?1:-1)*arcRadius; // away from centroid
+    const goesDown=hingeC[1]>centC[1]; // true if outward is downward on canvas
+
+    // Open position: door perpendicular to wall, pointing outward
+    const openEndX=hingeC[0];
+    const openEndY=goesDown?hingeC[1]+arcRadius:hingeC[1]-arcRadius;
+
+    // Arc from closed to open
     ctx.strokeStyle='rgba(225,29,72,0.3)';ctx.lineWidth=1.5;ctx.setLineDash([4,4]);
     ctx.beginPath();
-    // Arc from closed position (along wall) to open position (perpendicular, inward)
-    const arcRadius=doorW_px;
-    // Determine arc angles
-    // Hinge is the center of the arc, radius = door width in pixels
-    // Closed angle: toward free end (along wall)
     const closedAngle=Math.atan2(freeC[1]-hingeC[1],freeC[0]-hingeC[0]);
-    // Open angle: 90 degrees toward interior (centroid direction from wall)
-    const wallToCenter=Math.atan2(centC[1]-hingeC[1],centC[0]-hingeC[0]);
-    // The swing goes 90 degrees from closed toward the interior
-    const openAngle=swingLeft?closedAngle-Math.PI/2:closedAngle+Math.PI/2;
-    // Draw arc in correct direction
-    if(swingLeft){
-      ctx.arc(hingeC[0],hingeC[1],arcRadius,openAngle,closedAngle,false);
+    const openAngle=Math.atan2(openEndY-hingeC[1],openEndX-hingeC[0]);
+    // Draw arc - determine sweep direction
+    if(swingRight){
+      // Right hinge: closed points left, open points outward
+      ctx.arc(hingeC[0],hingeC[1],arcRadius,closedAngle,openAngle,goesDown);
     } else {
-      ctx.arc(hingeC[0],hingeC[1],arcRadius,closedAngle,openAngle,false);
+      // Left hinge: closed points right, open points outward
+      ctx.arc(hingeC[0],hingeC[1],arcRadius,openAngle,closedAngle,!goesDown);
     }
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.lineCap='butt';
 
-    // Draw open position (dashed line)
-    const openEndX=hingeC[0]+Math.cos(openAngle)*arcRadius;
-    const openEndY=hingeC[1]+Math.sin(openAngle)*arcRadius;
+    // Open position line (dashed)
     ctx.strokeStyle='rgba(225,29,72,0.25)';ctx.lineWidth=2;ctx.setLineDash([6,4]);
     ctx.beginPath();ctx.moveTo(hingeC[0],hingeC[1]);ctx.lineTo(openEndX,openEndY);ctx.stroke();
     ctx.setLineDash([]);
@@ -797,14 +839,14 @@ function drawFloorPlan(){
     ctx.beginPath();ctx.arc(hingeC[0],hingeC[1],4,0,Math.PI*2);
     ctx.fillStyle='#e11d48';ctx.fill();
 
-    // Door label
+    // Labels
     ctx.font='bold 10px IBM Plex Mono, monospace';
     ctx.fillStyle='#e11d48';ctx.textAlign='center';ctx.textBaseline='middle';
-    const doorLabelY=dlc[1]+((centC[1]-dlc[1])>0?16:-16);
-    ctx.fillText(S.doorWidth+'" Door',dcc[0],doorLabelY);
+    const lblDir=goesDown?1:-1;
+    ctx.fillText(S.doorWidth+'" Door',dcc[0],dcc[1]+lblDir*16);
     ctx.font='9px Outfit, sans-serif';
     ctx.fillStyle='rgba(225,29,72,0.7)';
-    ctx.fillText(swingLeft?'← Hinge Left':'Hinge Right →',dcc[0],doorLabelY+(doorLabelY>dlc[1]?13:-13));
+    ctx.fillText(swingRight?'Hinge Right →':'← Hinge Left',dcc[0],dcc[1]+lblDir*29);
   }
 
   // Draw vertex handles
@@ -858,42 +900,49 @@ fpCanvas.addEventListener('pointermove',e=>{
     const vi=fpDragging;
     const oldX=pts[vi][0],oldY=pts[vi][1];
     // Snap to grid (6-inch increments)
-    const snapX=Math.round(sx/6)*6,snapY=Math.round(sy/6)*6;
+    let snapX=Math.round(sx/6)*6,snapY=Math.round(sy/6)*6;
 
     // Rectilinear constraint: when moving a vertex, also move adjacent vertices
-    // to keep all edges horizontal or vertical
     const n=pts.length;
     const prevI=(vi-1+n)%n,nextI=(vi+1)%n;
-
-    // Check which coordinate is shared with prev and next
-    // If prev shares X (vertical edge), move prev's X too
-    // If prev shares Y (horizontal edge), move prev's Y too
     const prev=pts[prevI],next=pts[nextI];
 
+    // Save old state for rollback
+    const backup=JSON.parse(JSON.stringify(pts));
+
     if(Math.abs(prev[0]-oldX)<1){
-      // Vertical edge to prev → shared X → move both X
       pts[vi][0]=snapX;
       prev[0]=snapX;
     } else if(Math.abs(prev[1]-oldY)<1){
-      // Horizontal edge to prev → shared Y → move both Y
       pts[vi][1]=snapY;
       prev[1]=snapY;
     }
 
     if(Math.abs(next[0]-oldX)<1){
-      // Vertical edge to next → shared X
       pts[vi][0]=snapX;
       next[0]=snapX;
     } else if(Math.abs(next[1]-oldY)<1){
-      // Horizontal edge to next → shared Y
       pts[vi][1]=snapY;
       next[1]=snapY;
     }
 
-    // If neither matched, just move the point (freeform)
     if(pts[vi][0]===oldX&&pts[vi][1]===oldY){
       pts[vi][0]=snapX;
       pts[vi][1]=snapY;
+    }
+
+    // Validate: no edge should collapse to less than 24"
+    let valid=true;
+    for(let j=0;j<pts.length;j++){
+      const a=pts[j],b=pts[(j+1)%pts.length];
+      const edx=b[0]-a[0],edz=b[1]-a[1];
+      const el=Math.sqrt(edx*edx+edz*edz);
+      if(el<24&&el>1){ valid=false; break; }
+    }
+
+    // If invalid, rollback
+    if(!valid){
+      for(let j=0;j<pts.length;j++){pts[j][0]=backup[j][0];pts[j][1]=backup[j][1]}
     }
 
     drawFloorPlan();
@@ -1032,6 +1081,53 @@ function drawGizmo(){
   });
   gC.beginPath();gC.arc(gCtr,gCtr,3,0,Math.PI*2);gC.fillStyle='#64748b';gC.fill();
 }
+
+// Panel hover detection
+const raycaster=new THREE.Raycaster();
+const mouse=new THREE.Vector2();
+const highlightMat=new THREE.MeshStandardMaterial({color:0x0891b2,roughness:.4,metalness:.2,transparent:true,opacity:.35});
+let hoveredPanel=null;
+let hoveredOrigMat=null;
+const tooltip=document.getElementById('panel-tooltip');
+
+renderer.domElement.addEventListener('pointermove',e=>{
+  const rect=renderer.domElement.getBoundingClientRect();
+  mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+  mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  const hits=raycaster.intersectObjects(panelMeshes);
+
+  // Restore previous hover
+  if(hoveredPanel&&hoveredOrigMat){
+    hoveredPanel.material=hoveredOrigMat;
+    hoveredPanel=null;hoveredOrigMat=null;
+  }
+  tooltip.style.display='none';
+
+  if(hits.length>0){
+    const hit=hits[0].object;
+    if(hit.userData&&hit.userData.panelLetter){
+      hoveredPanel=hit;
+      hoveredOrigMat=hit.material;
+      hit.material=highlightMat;
+      // Show tooltip
+      const pts2=shapePoints;
+      const idx=hit.userData.edgeIdx;
+      const a=pts2[idx],b=pts2[(idx+1)%pts2.length];
+      const edgeLen=Math.round(Math.sqrt((b[0]-a[0])**2+(b[1]-a[1])**2));
+      const seg=hit.userData.segment?` (${hit.userData.segment})`:'';
+      tooltip.textContent=`Panel ${hit.userData.panelLetter}${seg} · ${edgeLen}"`;
+      tooltip.style.display='block';
+      tooltip.style.left=(e.clientX-rect.left+12)+'px';
+      tooltip.style.top=(e.clientY-rect.top-30)+'px';
+    }
+  }
+});
+
+renderer.domElement.addEventListener('pointerleave',()=>{
+  if(hoveredPanel&&hoveredOrigMat){hoveredPanel.material=hoveredOrigMat;hoveredPanel=null;hoveredOrigMat=null}
+  tooltip.style.display='none';
+});
 
 // Render loop
 (function animate(){
