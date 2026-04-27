@@ -241,7 +241,7 @@ const S = {
   type:'indoor', temperature:'cooler',
   finish:'stucco-aluminum', finishColor:'#c4c8cc',
   shape:'Rectangle', height:100, wallT:4,
-  doorWidth:34, doorOffset:19,
+  doorWidth:34, doorOffset:19, doorSwing:'left',
   floor:'standard', ramp:'interior',
   autoRotate:false, showDims:true, wireframe:false,
 };
@@ -720,6 +720,93 @@ function drawFloorPlan(){
     ctx.fillText(txt,labelX,labelY);
   }
 
+  // ── Draw door position and swing arc ──
+  // Find the front wall (same logic as 3D build)
+  let fpBestEdge=-1,fpBestLen=0;
+  for(let i=0;i<pts.length;i++){
+    const a2=pts[i],b2=pts[(i+1)%pts.length];
+    const ddx=b2[0]-a2[0],ddz=b2[1]-a2[1];
+    const el=Math.sqrt(ddx*ddx+ddz*ddz);
+    const ih=Math.abs(ddx)>Math.abs(ddz)*2;
+    // Outward normal check
+    let nnx=ddz,nnz=-ddx;const nnl=Math.sqrt(nnx*nnx+nnz*nnz)||1;nnx/=nnl;nnz/=nnl;
+    const emx2=(a2[0]+b2[0])/2,emz2=(a2[1]+b2[1])/2;
+    if(nnx*(emx2-centX)+nnz*(emz2-centY)<0){nnx=-nnx;nnz=-nnz}
+    if(ih&&nnz>.5&&el>fpBestLen){fpBestLen=el;fpBestEdge=i}
+  }
+
+  if(fpBestEdge>=0){
+    const ea=pts[fpBestEdge],eb=pts[(fpBestEdge+1)%pts.length];
+    const leftX=Math.min(ea[0],eb[0]);
+    const wallY2=(ea[1]+eb[1])/2;
+    const dW=S.doorWidth,dOff=S.doorOffset;
+    const doorLeftX=leftX+dOff;
+    const doorRightX=doorLeftX+dW;
+    const doorCX=doorLeftX+dW/2;
+
+    const dlc=tr.toCanvas([doorLeftX,wallY2]);
+    const drc=tr.toCanvas([doorRightX,wallY2]);
+    const dcc=tr.toCanvas([doorCX,wallY2]);
+    const doorW_px=Math.abs(drc[0]-dlc[0]);
+
+    // Door opening on wall (gap)
+    ctx.strokeStyle='#e11d48';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(dlc[0],dlc[1]);ctx.lineTo(drc[0],drc[1]);ctx.stroke();
+
+    // Door panel (closed position - perpendicular to wall, swinging inward)
+    const swingLeft=S.doorSwing==='left';
+    const hingeC=swingLeft?dlc:drc; // hinge point
+    const freeC=swingLeft?drc:dlc;  // free end (where it swings)
+
+    // Draw door panel as a thick line (closed position = along wall)
+    ctx.strokeStyle='#e11d48';ctx.lineWidth=4;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(hingeC[0],hingeC[1]);ctx.lineTo(freeC[0],freeC[1]);ctx.stroke();
+
+    // Swing arc (90 degree arc inward = toward lower Y in canvas = toward interior)
+    // Interior is toward centroid, so swing direction is from wall toward centroid
+    ctx.strokeStyle='rgba(225,29,72,0.3)';ctx.lineWidth=1.5;ctx.setLineDash([4,4]);
+    ctx.beginPath();
+    // Arc from closed position (along wall) to open position (perpendicular, inward)
+    const arcRadius=doorW_px;
+    // Determine arc angles
+    // Hinge is the center of the arc, radius = door width in pixels
+    // Closed angle: toward free end (along wall)
+    const closedAngle=Math.atan2(freeC[1]-hingeC[1],freeC[0]-hingeC[0]);
+    // Open angle: 90 degrees toward interior (centroid direction from wall)
+    const wallToCenter=Math.atan2(centC[1]-hingeC[1],centC[0]-hingeC[0]);
+    // The swing goes 90 degrees from closed toward the interior
+    const openAngle=swingLeft?closedAngle-Math.PI/2:closedAngle+Math.PI/2;
+    // Draw arc in correct direction
+    if(swingLeft){
+      ctx.arc(hingeC[0],hingeC[1],arcRadius,openAngle,closedAngle,false);
+    } else {
+      ctx.arc(hingeC[0],hingeC[1],arcRadius,closedAngle,openAngle,false);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineCap='butt';
+
+    // Draw open position (dashed line)
+    const openEndX=hingeC[0]+Math.cos(openAngle)*arcRadius;
+    const openEndY=hingeC[1]+Math.sin(openAngle)*arcRadius;
+    ctx.strokeStyle='rgba(225,29,72,0.25)';ctx.lineWidth=2;ctx.setLineDash([6,4]);
+    ctx.beginPath();ctx.moveTo(hingeC[0],hingeC[1]);ctx.lineTo(openEndX,openEndY);ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Hinge dot
+    ctx.beginPath();ctx.arc(hingeC[0],hingeC[1],4,0,Math.PI*2);
+    ctx.fillStyle='#e11d48';ctx.fill();
+
+    // Door label
+    ctx.font='bold 10px IBM Plex Mono, monospace';
+    ctx.fillStyle='#e11d48';ctx.textAlign='center';ctx.textBaseline='middle';
+    const doorLabelY=dlc[1]+((centC[1]-dlc[1])>0?16:-16);
+    ctx.fillText(S.doorWidth+'" Door',dcc[0],doorLabelY);
+    ctx.font='9px Outfit, sans-serif';
+    ctx.fillStyle='rgba(225,29,72,0.7)';
+    ctx.fillText(swingLeft?'← Hinge Left':'Hinge Right →',dcc[0],doorLabelY+(doorLabelY>dlc[1]?13:-13));
+  }
+
   // Draw vertex handles
   for(let i=0;i<pts.length;i++){
     const pc=tr.toCanvas(pts[i]);
@@ -838,7 +925,7 @@ build();updateMat();updateSliders();
 // Undo/Redo (must be before UI bindings)
 // ═══════════════════════════════════════════════════════
 const undoStack=[],redoStack=[];
-const stateKeys=['type','temperature','finish','finishColor','shape','height','wallT','doorWidth','doorOffset','floor','ramp','wireframe','showDims'];
+const stateKeys=['type','temperature','finish','finishColor','shape','height','wallT','doorWidth','doorOffset','doorSwing','floor','ramp','wireframe','showDims'];
 function captureState(){const snap={};stateKeys.forEach(k=>snap[k]=S[k]);snap._pts=JSON.stringify(shapePoints);return JSON.stringify(snap)}
 function restoreState(json){const snap=JSON.parse(json);stateKeys.forEach(k=>{if(snap[k]!==undefined)S[k]=snap[k]});if(snap._pts)shapePoints=JSON.parse(snap._pts);
   document.getElementById('slider-height').value=S.height;document.getElementById('custom-color').value=S.finishColor;
