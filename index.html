@@ -171,7 +171,7 @@
           </div>
         </div>
         <div id="texture-controls" style="display:none;margin-top:12px">
-          <div class="slider-row"><div class="slider-header"><span style="font-size:13px;font-weight:500">Texture Scale</span><span class="slider-value" id="val-tex-scale">1.0x</span></div><div class="slider-track"><input type="range" id="tex-scale" min="0.1" max="5" step="0.1" value="1"></div><div class="slider-range-labels"><span>0.1x</span><span>5.0x</span></div></div>
+          <div class="slider-row"><div class="slider-header"><span style="font-size:13px;font-weight:500">Texture Scale</span><span class="slider-value" id="val-tex-scale">5.0x</span></div><div class="slider-track"><input type="range" id="tex-scale" min="0.1" max="5" step="0.1" value="5"></div><div class="slider-range-labels"><span>0.1x</span><span>5.0x</span></div></div>
           <div class="slider-row"><div class="slider-header"><span style="font-size:13px;font-weight:500">Rotation</span><span class="slider-value" id="val-tex-rotation">0°</span></div><div class="slider-track"><input type="range" id="tex-rotation" min="0" max="360" step="1" value="0"></div><div class="slider-range-labels"><span>0°</span><span>360°</span></div></div>
           <div style="margin-top:8px"><span style="font-size:13px;font-weight:500;color:var(--text-dark)">Fit Mode</span>
             <div class="toggle-group" style="margin-top:6px">
@@ -188,7 +188,7 @@
         </div>
       </div>
       <div class="panel-section"><div class="section-label">Compartment Height (DIM A)</div><div class="slider-row"><div class="slider-header"><span></span><span class="slider-value" id="val-height">8' 4"</span></div><div class="slider-track"><input type="range" id="slider-height" min="90" max="120" step="2" value="100"></div><div class="slider-range-labels"><span>7' 6"</span><span>10' 0"</span></div></div></div>
-      <div class="panel-section"><div class="section-label">Add Floor in Compartment?</div><select class="custom-select" id="floor-select"><option value="standard">Standard Floor (600lbs per sq ft) NO ROLLING TRAFFIC</option><option value="heavy">Heavy-Duty Floor (1000lbs per sq ft)</option><option value="reinforced">Reinforced Floor - Forklift Rated</option><option value="none">No Floor (Existing Concrete)</option></select></div>
+      <div class="panel-section"><div class="section-label">Add Floor in Compartment?</div><select class="custom-select" id="floor-select"><option value="standard">Standard Floor (600lbs per sq ft) NO ROLLING TRAFFIC</option><option value="durafloor">DuraFloor (12000 lbs per sq ft) NO ROLLING TRAFFIC</option><option value="recessed">Recessed Floor</option><option value="none">Without Floor</option></select></div>
       <div class="panel-section"><div class="section-label">Compartment Ramp</div><div class="toggle-group"><button class="toggle-option active" data-val="interior" id="ramp-interior">Interior Ramp</button><button class="toggle-option" data-val="exterior" id="ramp-exterior">Exterior Ramp</button><button class="toggle-option" data-val="none" id="ramp-none">No Ramp</button></div></div>
     </div>
     <!-- PAGE: Compartment 1 Shape -->
@@ -284,7 +284,7 @@ const S = {
   doorWidth:34, doorOffset:19, doorSwing:'right',
   floor:'standard', ramp:'interior',
   autoRotate:false, showDims:true, wireframe:false,
-  texScale:1, texRotation:0, texFit:'tile', texRepeatX:true, texRepeatY:true, texGap:0,
+  texScale:5, texRotation:0, texFit:'tile', texRepeatX:true, texRepeatY:true, texGap:0,
 };
 // Deep copy of current shape points (user can adjust edges)
 let shapePoints = JSON.parse(JSON.stringify(SHAPES[S.shape]));
@@ -1397,7 +1397,23 @@ setupToggle(['type-outdoor','type-indoor'],'type',()=>{
   currentTabIndex=0;updatePanelPage();updateTabHighlight();updateNavButtons();
   build();pushUndo();
 });
-setupToggle(['temp-cooler','temp-freezer'],'temperature',()=>pushUndo());
+setupToggle(['temp-cooler','temp-freezer'],'temperature',()=>{
+  updateFloorOptions();
+  pushUndo();
+});
+
+function updateFloorOptions(){
+  const sel=document.getElementById('floor-select');
+  const noneOpt=sel.querySelector('option[value="none"]');
+  if(S.temperature==='freezer'){
+    // Freezer: no "Without Floor" option
+    if(noneOpt)noneOpt.style.display='none';
+    if(S.floor==='none'){S.floor='standard';sel.value='standard';build()}
+  } else {
+    // Cooler: show "Without Floor"
+    if(noneOpt)noneOpt.style.display='';
+  }
+}
 setupToggle(['ramp-interior','ramp-exterior','ramp-none'],'ramp',()=>{build();pushUndo()});
 
 document.querySelectorAll('.finish-swatch').forEach(sw=>{sw.addEventListener('click',()=>{document.querySelectorAll('.finish-swatch').forEach(s=>s.classList.remove('active'));sw.classList.add('active');S.finish=sw.dataset.finish;S.finishColor=sw.dataset.color;document.getElementById('custom-color').value=S.finishColor;updateMat();updateTextureZoneVisibility();pushUndo()})});
