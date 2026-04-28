@@ -672,46 +672,111 @@ function build(){
     const frameW=In(2);
     const ep=.002;
 
-    // ── Split front wall: left segment | door gap | right segment ──
-    const leftSegW=doorLeftX-frameW-(panelLeftX+ep);
-    if(leftSegW>.01){
-      const lsg=new THREE.BoxGeometry(leftSegW,wallH,T);
-      const lPMat=makeExtMat();
-      const lMidX=panelLeftX+ep+leftSegW/2;
-      setWorldSpaceUVs(lsg,lMidX,fTop+ep+wallH/2,wallCenterZ,leftSegW,wallH,T,true,0,1);
-      const lMats=[intMat,intMat,intMat,intMat,lPMat,intMat];
-      const lsm=new THREE.Mesh(lsg,lMats);
-      lsm.position.set(lMidX,fTop+ep+wallH/2,wallCenterZ);
-      lsm.castShadow=true;lsm.receiveShadow=true;cooler.add(lsm);
-      lsm.userData={panelLetter:getPanelLetter(bestEdge,shapePoints,'left'),edgeIdx:bestEdge,segment:'left'};
-      panelMeshes.push(lsm);
-      const leg=new THREE.LineSegments(new THREE.EdgesGeometry(lsg),edgeMat);
-      leg.position.copy(lsm.position);cooler.add(leg);
-    }
-    const rightSegW=(panelRightX-ep)-(doorRightX+frameW);
-    if(rightSegW>.01){
-      const rsg=new THREE.BoxGeometry(rightSegW,wallH,T);
-      const rPMat=makeExtMat();
-      const rMidX=doorRightX+frameW+rightSegW/2;
-      setWorldSpaceUVs(rsg,rMidX,fTop+ep+wallH/2,wallCenterZ,rightSegW,wallH,T,true,0,1);
-      const rMats=[intMat,intMat,intMat,intMat,rPMat,intMat];
-      const rsm=new THREE.Mesh(rsg,rMats);
-      rsm.position.set(rMidX,fTop+ep+wallH/2,wallCenterZ);
-      rsm.castShadow=true;rsm.receiveShadow=true;cooler.add(rsm);
-      rsm.userData={panelLetter:getPanelLetter(bestEdge,shapePoints,'right'),edgeIdx:bestEdge,segment:'right'};
-      panelMeshes.push(rsm);
-      const reg=new THREE.LineSegments(new THREE.EdgesGeometry(rsg),edgeMat);
-      reg.position.copy(rsm.position);cooler.add(reg);
-    }
-    // Above door segment (no texture - uses interior material, lifted epsilon)
+    // ── Panel A: L-shaped extrusion (left wall + above-door-left as one piece) ──
     const aboveH=wallH-dH;
-    if(aboveH>.01){
-      const asg=new THREE.BoxGeometry(dW+frameW*2,aboveH,T);
-      const asm2=new THREE.Mesh(asg,intMat);
-      asm2.position.set(doorCX,fTop+.002+dH+aboveH/2,wallCenterZ);
-      asm2.castShadow=true;cooler.add(asm2);
-      const aeg=new THREE.LineSegments(new THREE.EdgesGeometry(asg),edgeMat);
-      aeg.position.copy(asm2.position);cooler.add(aeg);
+    const letterA=getPanelLetter(bestEdge,shapePoints,'left');
+    const letterB=getPanelLetter(bestEdge,shapePoints,'right');
+    const lx0=panelLeftX+ep;       // left edge (post inner + epsilon)
+    const lx1=doorLeftX-frameW;    // where door frame starts (right edge of full-height part)
+    const lx2=doorCX;              // right edge of above-door part (door center)
+    const totalAW=lx2-lx0;        // total width of Panel A
+    const fullHW=lx1-lx0;         // width of full-height section
+
+    // Shared texture variables for Panel A and B
+    const baseTile=4/S.texScale;
+    const rot=S.texRotation*Math.PI/180;
+    const cosR=Math.cos(rot),sinR=Math.sin(rot);
+    const gap=S.texGap/256;
+
+    if(totalAW>.01){
+      // L-shape profile in local XY (0,0 = bottom-left)
+      // Full height on left, door notch cut from bottom-right
+      const sA=new THREE.Shape();
+      sA.moveTo(0,0);              // bottom-left
+      if(fullHW>.01){
+        sA.lineTo(fullHW,0);       // bottom to where full-height ends
+        sA.lineTo(fullHW,dH);      // up to door-top height
+      }
+      sA.lineTo(totalAW,dH);       // right to above-door right edge (at door-top height)
+      sA.lineTo(totalAW,wallH);    // up to full height
+      sA.lineTo(0,wallH);          // top-left
+      sA.closePath();
+
+      const geoA=new THREE.ExtrudeGeometry(sA,{depth:T,bevelEnabled:false});
+      const pMatA=makeExtMat();
+      const matsA=[pMatA,intMat,intMat];
+
+      // World-space UVs on front and back faces
+      const uvA=geoA.attributes.uv;
+      const posA=geoA.attributes.position;
+      for(let vi=0;vi<uvA.count;vi++){
+        const lx=posA.getX(vi),ly=posA.getY(vi),lz=posA.getZ(vi);
+        if(Math.abs(lz)<.01||Math.abs(lz-T)<.01){
+          const wx=lx+lx0,wy=ly+fTop+ep;
+          let u=wx/baseTile,v=wy/baseTile;
+          const cu=u,cv=v;
+          u=cu*cosR-cv*sinR;v=cu*sinR+cv*cosR;
+          u*=(1+gap);v*=(1+gap);
+          uvA.setXY(vi,u,v);
+        }
+      }
+      uvA.needsUpdate=true;
+
+      const meshA=new THREE.Mesh(geoA,matsA);
+      meshA.position.set(lx0,fTop+ep,wallCenterZ-T/2);
+      meshA.castShadow=true;meshA.receiveShadow=true;cooler.add(meshA);
+      meshA.userData={panelLetter:letterA,edgeIdx:bestEdge,segment:'left'};
+      panelMeshes.push(meshA);
+      const edgA=new THREE.LineSegments(new THREE.EdgesGeometry(geoA,15),edgeMat);
+      edgA.position.copy(meshA.position);cooler.add(edgA);
+    }
+
+    // ── Panel B: mirrored L-shape (right wall + above-door-right as one piece) ──
+    const rx0=doorCX;              // left edge (door center)
+    const rx1=doorRightX+frameW;   // where full-height section starts
+    const rx2=panelRightX-ep;      // right edge (post inner - epsilon)
+    const totalBW=rx2-rx0;         // total width of Panel B
+    const fullHWB=rx2-rx1;         // width of full-height section (on right side)
+
+    if(totalBW>.01){
+      // L-shape profile: full height on right, door notch cut from bottom-left
+      const sB=new THREE.Shape();
+      sB.moveTo(0,dH);             // left edge at door-top height
+      sB.lineTo(0,wallH);          // up to full height
+      sB.lineTo(totalBW,wallH);    // top-right
+      sB.lineTo(totalBW,0);        // down to bottom-right
+      if(fullHWB>.01){
+        sB.lineTo(totalBW-fullHWB,0);  // bottom to where full-height starts
+        sB.lineTo(totalBW-fullHWB,dH);  // up to door-top height
+      }
+      sB.closePath();
+
+      const geoB=new THREE.ExtrudeGeometry(sB,{depth:T,bevelEnabled:false});
+      const pMatB=makeExtMat();
+      const matsB=[pMatB,intMat,intMat];
+
+      const uvB=geoB.attributes.uv;
+      const posB=geoB.attributes.position;
+      for(let vi=0;vi<uvB.count;vi++){
+        const lx=posB.getX(vi),ly=posB.getY(vi),lz=posB.getZ(vi);
+        if(Math.abs(lz)<.01||Math.abs(lz-T)<.01){
+          const wx=lx+rx0,wy=ly+fTop+ep;
+          let u=wx/baseTile,v=wy/baseTile;
+          const cu=u,cv=v;
+          u=cu*cosR-cv*sinR;v=cu*sinR+cv*cosR;
+          u*=(1+gap);v*=(1+gap);
+          uvB.setXY(vi,u,v);
+        }
+      }
+      uvB.needsUpdate=true;
+
+      const meshB=new THREE.Mesh(geoB,matsB);
+      meshB.position.set(rx0,fTop+ep,wallCenterZ-T/2);
+      meshB.castShadow=true;meshB.receiveShadow=true;cooler.add(meshB);
+      meshB.userData={panelLetter:letterB,edgeIdx:bestEdge,segment:'right'};
+      panelMeshes.push(meshB);
+      const edgB=new THREE.LineSegments(new THREE.EdgesGeometry(geoB,15),edgeMat);
+      edgB.position.copy(meshB.position);cooler.add(edgB);
     }
 
     // Door frame sides
