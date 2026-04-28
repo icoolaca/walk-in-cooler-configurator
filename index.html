@@ -325,43 +325,71 @@ const floorMat=new THREE.MeshStandardMaterial({color:0xb8bcc0,roughness:.7,metal
 const edgeMat=new THREE.LineBasicMaterial({color:0x888888,transparent:true,opacity:.22});
 const dimLineMat=new THREE.LineBasicMaterial({color:0xdd3333});
 const panelMeshes=[];
-const panelExtMats=[]; // per-panel exterior materials for uniform texture sizing
+const panelExtMats=[];
 
-// Create a per-panel exterior material with texture repeat based on real-world panel size
-function makeExtMatForPanel(widthFt,heightFt){
-  const mat=extMat.clone();
-  if(extMat.map&&S.finish==='custom-texture'){
-    const tex=extMat.map.clone();
-    // Base tile size: 4 feet at scale 1.0
-    const baseTile=4/S.texScale;
-    const repX=widthFt/baseTile;
-    const repY=heightFt/baseTile;
-    if(S.texFit==='tile'){
-      tex.wrapS=S.texRepeatX?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
-      tex.wrapT=S.texRepeatY?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
-      tex.repeat.set(repX,repY);
-    } else if(S.texFit==='cover'){
-      tex.wrapS=THREE.ClampToEdgeWrapping;
-      tex.wrapT=THREE.ClampToEdgeWrapping;
-      const maxRep=Math.max(repX,repY);
-      tex.repeat.set(maxRep,maxRep);
+// World-space UV mapping: rewrite UV coordinates of the exterior face
+// so the texture is projected uniformly in world space across all panels.
+// baseTile = how many feet one texture tile covers (controlled by texScale)
+function setWorldSpaceUVs(geo, posX, posY, posZ, panelW, panelH, panelD, isHoriz, nx, nz){
+  if(!extMat.map || S.finish!=='custom-texture') return;
+  const uv=geo.attributes.uv;
+  const pos=geo.attributes.position;
+  const baseTile=4/S.texScale;
+  const rot=S.texRotation*Math.PI/180;
+  const cosR=Math.cos(rot),sinR=Math.sin(rot);
+  const gap=S.texGap/256;
+
+  // BoxGeometry face order: +X(0-3), -X(4-7), +Y(8-11), -Y(12-15), +Z(16-19), -Z(20-23)
+  // Each face has 4 vertices
+  for(let vi=0;vi<uv.count;vi++){
+    const faceIdx=Math.floor(vi/4);
+    // Determine if this face is the exterior face
+    let isExterior=false;
+    if(isHoriz){
+      if(nz>0 && faceIdx===4) isExterior=true;  // +Z face
+      if(nz<0 && faceIdx===5) isExterior=true;  // -Z face
     } else {
-      tex.wrapS=THREE.ClampToEdgeWrapping;
-      tex.wrapT=THREE.ClampToEdgeWrapping;
-      const minRep=Math.min(repX,repY);
-      tex.repeat.set(minRep,minRep);
-      tex.offset.set((1-minRep/repX)/2,(1-minRep/repY)/2);
+      if(nx>0 && faceIdx===0) isExterior=true;  // +X face
+      if(nx<0 && faceIdx===1) isExterior=true;  // -X face
     }
-    tex.rotation=S.texRotation*Math.PI/180;
-    tex.center.set(.5,.5);
-    // Gap: add padding by scaling down the UV slightly
-    if(S.texGap>0){
-      const gapFrac=S.texGap/256; // gap as fraction of texture
-      tex.repeat.x*=(1+gapFrac);
-      tex.repeat.y*=(1+gapFrac);
+
+    if(isExterior){
+      // Get vertex local position
+      const lx=pos.getX(vi), ly=pos.getY(vi), lz=pos.getZ(vi);
+      // Convert to world position
+      const wx=lx+posX, wy=ly+posY, wz=lz+posZ;
+      // Project: horizontal surface along wall → U=along wall, V=height
+      let u,v;
+      if(isHoriz){
+        u=wx/baseTile; v=wy/baseTile;
+      } else {
+        u=wz/baseTile; v=wy/baseTile;
+      }
+      // Apply rotation around center
+      const cu=u,cv=v;
+      u=cu*cosR-cv*sinR;
+      v=cu*sinR+cv*cosR;
+      // Apply gap
+      u*=(1+gap); v*=(1+gap);
+      uv.setXY(vi,u,v);
     }
-    tex.needsUpdate=true;
-    mat.map=tex;
+  }
+  uv.needsUpdate=true;
+}
+
+// Create exterior material for a panel (clones extMat, shares the same texture)
+function makeExtMat(){
+  const mat=extMat.clone();
+  if(extMat.map && S.finish==='custom-texture'){
+    mat.map=extMat.map;
+    // Wrapping set on the shared texture
+    extMat.map.wrapS=S.texRepeatX?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
+    extMat.map.wrapT=S.texRepeatY?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
+    extMat.map.repeat.set(1,1); // UVs handle the repeat now
+    extMat.map.offset.set(0,0);
+    extMat.map.rotation=0;
+    extMat.map.center.set(0,0);
+    extMat.map.needsUpdate=true;
   }
   mat.needsUpdate=true;
   panelExtMats.push(mat);
@@ -540,9 +568,9 @@ function build(){
     const cz=p[1]+signZ*T/2;
     postPositions.push({x:cx,z:cz,signX,signZ,px:p[0],pz:p[1]});
 
-    // Draw corner post
+    // Draw corner post (no texture - uses interior material)
     const postGeo=new THREE.BoxGeometry(T,wallH,T);
-    const post=new THREE.Mesh(postGeo,extMat);
+    const post=new THREE.Mesh(postGeo,intMat);
     post.position.set(cx,fTop+wallH/2,cz);
     post.castShadow=true;post.receiveShadow=true;cooler.add(post);
     const peg=new THREE.LineSegments(new THREE.EdgesGeometry(postGeo),edgeMat);
@@ -579,7 +607,8 @@ function build(){
       const midX=(x1+x2)/2;
       const midZ=(a[1]+b[1])/2 - nz*T/2;
       const wallGeo=new THREE.BoxGeometry(panelW,wallH,T);
-      const pMat=makeExtMatForPanel(panelW,wallH);
+      const pMat=makeExtMat();
+      setWorldSpaceUVs(wallGeo,midX,fTop+wallH/2,midZ,panelW,wallH,T,true,nx,nz);
       const mats=[intMat,intMat,intMat,intMat,nz>0?pMat:intMat,nz<0?pMat:intMat];
       const wall=new THREE.Mesh(wallGeo,mats);
       wall.position.set(midX,fTop+wallH/2,midZ);
@@ -598,7 +627,8 @@ function build(){
       const midZ=(z1+z2)/2;
       const midX=(a[0]+b[0])/2 - nx*T/2;
       const wallGeo=new THREE.BoxGeometry(T,wallH,panelD);
-      const pMat=makeExtMatForPanel(panelD,wallH);
+      const pMat=makeExtMat();
+      setWorldSpaceUVs(wallGeo,midX,fTop+wallH/2,midZ,T,wallH,panelD,false,nx,nz);
       const mats=[nx>0?pMat:intMat,nx<0?pMat:intMat,intMat,intMat,intMat,intMat];
       const wall=new THREE.Mesh(wallGeo,mats);
       wall.position.set(midX,fTop+wallH/2,midZ);
@@ -639,8 +669,9 @@ function build(){
     const leftSegW=doorLeftX-frameW-leftX;
     if(leftSegW>.01){
       const lsg=new THREE.BoxGeometry(leftSegW,wallH,T);
-      const lPMat=makeExtMatForPanel(leftSegW,wallH);
-      const lMats=[intMat,intMat,intMat,intMat,lPMat,intMat]; // +Z is exterior (front wall faces +Z)
+      const lPMat=makeExtMat();
+      setWorldSpaceUVs(lsg,leftX+leftSegW/2,fTop+wallH/2,wallCenterZ,leftSegW,wallH,T,true,0,1);
+      const lMats=[intMat,intMat,intMat,intMat,lPMat,intMat];
       const lsm=new THREE.Mesh(lsg,lMats);
       lsm.position.set(leftX+leftSegW/2,fTop+wallH/2,wallCenterZ);
       lsm.castShadow=true;lsm.receiveShadow=true;cooler.add(lsm);
@@ -652,7 +683,8 @@ function build(){
     const rightSegW=rightX-(doorRightX+frameW);
     if(rightSegW>.01){
       const rsg=new THREE.BoxGeometry(rightSegW,wallH,T);
-      const rPMat=makeExtMatForPanel(rightSegW,wallH);
+      const rPMat=makeExtMat();
+      setWorldSpaceUVs(rsg,doorRightX+frameW+rightSegW/2,fTop+wallH/2,wallCenterZ,rightSegW,wallH,T,true,0,1);
       const rMats=[intMat,intMat,intMat,intMat,rPMat,intMat];
       const rsm=new THREE.Mesh(rsg,rMats);
       rsm.position.set(doorRightX+frameW+rightSegW/2,fTop+wallH/2,wallCenterZ);
@@ -662,11 +694,11 @@ function build(){
       const reg=new THREE.LineSegments(new THREE.EdgesGeometry(rsg),edgeMat);
       reg.position.copy(rsm.position);cooler.add(reg);
     }
-    // Above door segment
+    // Above door segment (no texture - uses interior material)
     const aboveH=wallH-dH;
     if(aboveH>.01){
       const asg=new THREE.BoxGeometry(dW+frameW*2,aboveH,T);
-      const asm2=new THREE.Mesh(asg,extMat);
+      const asm2=new THREE.Mesh(asg,intMat);
       asm2.position.set(doorCX,fTop+dH+aboveH/2,wallCenterZ);
       asm2.castShadow=true;cooler.add(asm2);
       const aeg=new THREE.LineSegments(new THREE.EdgesGeometry(asg),edgeMat);
