@@ -460,6 +460,19 @@ function getPanelLetter(edgeIdx,pts,segment){
   return String.fromCharCode(65+offset+1); // +1 because door uses A and B
 }
 
+// Helper: get corner joint number for a vertex index
+// Joint 1 = left corner of Panel A (left end of door wall)
+// Then counter-clockwise: 2, 3, 4...
+function getJointNumber(vertIdx,pts){
+  const doorEdge=getDoorEdge(pts);
+  const n=pts.length;
+  const ea=pts[doorEdge],eb=pts[(doorEdge+1)%n];
+  // When facing door from outside (+Z looking toward -Z), left = max X
+  const leftVert=ea[0]<eb[0]?doorEdge:(doorEdge+1)%n;
+  const offset=(leftVert-vertIdx+n)%n;
+  return offset+1;
+}
+
 function build(){
   clearGroup(dimGroup);clearGroup(cooler);cooler.add(dimGroup);
   dimGroup.visible=S.showDims;
@@ -572,6 +585,8 @@ function build(){
     const post=new THREE.Mesh(postGeo,intMat);
     post.position.set(cx,fTop+.002+wallH/2,cz);
     post.castShadow=true;post.receiveShadow=true;cooler.add(post);
+    post.userData={isJoint:true,jointNumber:getJointNumber(i,shapePoints),vertIdx:i};
+    panelMeshes.push(post);
     const peg=new THREE.LineSegments(new THREE.EdgesGeometry(postGeo),edgeMat);
     peg.position.copy(post.position);cooler.add(peg);
   }
@@ -1281,7 +1296,7 @@ function drawFloorPlan(){
     ctx.fillText(swingRight?'Hinge Right →':'← Hinge Left',dcc[0],dcc[1]+lblDir*29);
   }
 
-  // Draw vertex handles
+  // Draw vertex handles with joint numbers
   for(let i=0;i<pts.length;i++){
     const pc=tr.toCanvas(pts[i]);
     ctx.beginPath();ctx.arc(pc[0],pc[1],7,0,Math.PI*2);
@@ -1291,6 +1306,15 @@ function drawFloorPlan(){
     // Inner dot
     ctx.beginPath();ctx.arc(pc[0],pc[1],3,0,Math.PI*2);
     ctx.fillStyle='#0891b2';ctx.fill();
+    // Joint number label (offset outward from centroid)
+    const jNum=getJointNumber(i,pts);
+    const jdx=pc[0]-centC[0],jdy=pc[1]-centC[1];
+    const jdl=Math.sqrt(jdx*jdx+jdy*jdy)||1;
+    const jlx=pc[0]+jdx/jdl*16,jly=pc[1]+jdy/jdl*16;
+    ctx.font='bold 9px IBM Plex Mono, monospace';
+    ctx.fillStyle='rgba(71,85,105,0.8)';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('J'+jNum,jlx,jly);
   }
 }
 
@@ -1554,16 +1578,20 @@ renderer.domElement.addEventListener('pointermove',e=>{
 
   if(hits.length>0){
     const hit=hits[0].object;
-    if(hit.userData&&hit.userData.panelLetter){
+    if(hit.userData&&(hit.userData.panelLetter||hit.userData.isJoint)){
       hoveredPanel=hit;
       hoveredOrigMat=hit.material;
       hit.material=highlightMat;
       // Show tooltip
-      const pts2=shapePoints;
-      const idx=hit.userData.edgeIdx;
-      const a=pts2[idx],b=pts2[(idx+1)%pts2.length];
-      const edgeLen=Math.round(Math.sqrt((b[0]-a[0])**2+(b[1]-a[1])**2));
-      tooltip.textContent=`Panel ${hit.userData.panelLetter} · ${edgeLen}"`;
+      if(hit.userData.isJoint){
+        tooltip.textContent=`Corner Joint ${hit.userData.jointNumber}`;
+      } else {
+        const pts2=shapePoints;
+        const idx=hit.userData.edgeIdx;
+        const a=pts2[idx],b=pts2[(idx+1)%pts2.length];
+        const edgeLen=Math.round(Math.sqrt((b[0]-a[0])**2+(b[1]-a[1])**2));
+        tooltip.textContent=`Panel ${hit.userData.panelLetter} · ${edgeLen}"`;
+      }
       tooltip.style.display='block';
       tooltip.style.left=(e.clientX-rect.left+12)+'px';
       tooltip.style.top=(e.clientY-rect.top-30)+'px';
