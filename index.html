@@ -511,8 +511,7 @@ function build(){
   const outerV=offsetPoly(fp,T/2);
   const innerV=offsetPoly(fp,-T/2);
 
-  // ── Floor (polygon shape, flat on ground) ──
-  // Shape XY maps to world XZ after rotateX(-PI/2), but Y→-Z, so negate Z
+  // ── Floor (shifted down by floorT so it sits entirely below walls/posts) ──
   if(hasFloor){
     const floorShape=new THREE.Shape();
     floorShape.moveTo(fp[0][0],-fp[0][1]);
@@ -521,7 +520,7 @@ function build(){
     const floorGeo=new THREE.ExtrudeGeometry(floorShape,{depth:floorT,bevelEnabled:false});
     floorGeo.rotateX(-Math.PI/2);
     const floorMesh=new THREE.Mesh(floorGeo,floorMat);
-    floorMesh.position.y=floorT;
+    floorMesh.position.y=0; // top face at Y=0, extrudes down to Y=-floorT
     floorMesh.castShadow=true;floorMesh.receiveShadow=true;
     cooler.add(floorMesh);
   }
@@ -568,10 +567,10 @@ function build(){
     const cz=p[1]+signZ*T/2;
     postPositions.push({x:cx,z:cz,signX,signZ,px:p[0],pz:p[1]});
 
-    // Draw corner post (no texture - uses interior material)
+    // Draw corner post (no texture - uses interior material, lifted epsilon above floor)
     const postGeo=new THREE.BoxGeometry(T,wallH,T);
     const post=new THREE.Mesh(postGeo,intMat);
-    post.position.set(cx,fTop+wallH/2,cz);
+    post.position.set(cx,fTop+.002+wallH/2,cz);
     post.castShadow=true;post.receiveShadow=true;cooler.add(post);
     const peg=new THREE.LineSegments(new THREE.EdgesGeometry(postGeo),edgeMat);
     peg.position.copy(post.position);cooler.add(peg);
@@ -600,18 +599,19 @@ function build(){
     if(isHoriz){
       const postA_innerX=postA.px + postA.signX*T;
       const postB_innerX=postB.px + postB.signX*T;
-      const x1=Math.min(postA_innerX,postB_innerX);
-      const x2=Math.max(postA_innerX,postB_innerX);
+      const ep=.002; // epsilon gap to prevent Z-fighting with posts
+      const x1=Math.min(postA_innerX,postB_innerX)+ep;
+      const x2=Math.max(postA_innerX,postB_innerX)-ep;
       const panelW=x2-x1;
       if(panelW<.01)continue;
       const midX=(x1+x2)/2;
       const midZ=(a[1]+b[1])/2 - nz*T/2;
       const wallGeo=new THREE.BoxGeometry(panelW,wallH,T);
       const pMat=makeExtMat();
-      setWorldSpaceUVs(wallGeo,midX,fTop+wallH/2,midZ,panelW,wallH,T,true,nx,nz);
+      setWorldSpaceUVs(wallGeo,midX,fTop+ep+wallH/2,midZ,panelW,wallH,T,true,nx,nz);
       const mats=[intMat,intMat,intMat,intMat,nz>0?pMat:intMat,nz<0?pMat:intMat];
       const wall=new THREE.Mesh(wallGeo,mats);
-      wall.position.set(midX,fTop+wallH/2,midZ);
+      wall.position.set(midX,fTop+ep+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
       wall.userData={panelLetter:getPanelLetter(i,shapePoints),edgeIdx:i};
       panelMeshes.push(wall);
@@ -620,18 +620,19 @@ function build(){
     } else {
       const postA_innerZ=postA.pz + postA.signZ*T;
       const postB_innerZ=postB.pz + postB.signZ*T;
-      const z1=Math.min(postA_innerZ,postB_innerZ);
-      const z2=Math.max(postA_innerZ,postB_innerZ);
+      const ep=.002;
+      const z1=Math.min(postA_innerZ,postB_innerZ)+ep;
+      const z2=Math.max(postA_innerZ,postB_innerZ)-ep;
       const panelD=z2-z1;
       if(panelD<.01)continue;
       const midZ=(z1+z2)/2;
       const midX=(a[0]+b[0])/2 - nx*T/2;
       const wallGeo=new THREE.BoxGeometry(T,wallH,panelD);
       const pMat=makeExtMat();
-      setWorldSpaceUVs(wallGeo,midX,fTop+wallH/2,midZ,T,wallH,panelD,false,nx,nz);
+      setWorldSpaceUVs(wallGeo,midX,fTop+ep+wallH/2,midZ,T,wallH,panelD,false,nx,nz);
       const mats=[nx>0?pMat:intMat,nx<0?pMat:intMat,intMat,intMat,intMat,intMat];
       const wall=new THREE.Mesh(wallGeo,mats);
-      wall.position.set(midX,fTop+wallH/2,midZ);
+      wall.position.set(midX,fTop+ep+wallH/2,midZ);
       wall.castShadow=true;wall.receiveShadow=true;cooler.add(wall);
       wall.userData={panelLetter:getPanelLetter(i,shapePoints),edgeIdx:i};
       panelMeshes.push(wall);
@@ -657,49 +658,57 @@ function build(){
     const dW=In(S.doorWidth),dOff=In(S.doorOffset);
     const dH=Math.min(wallH-.2,6.67);
     const doorT=In(5);
-    const leftX=Math.min(ea[0],eb[0]);
-    const rightX=Math.max(ea[0],eb[0]);
+    // Use corner post inner edges for the front wall, not raw shape points
+    const postL=postPositions[bestEdge];
+    const postR=postPositions[(bestEdge+1)%fp.length];
+    const innerLeftX=postL.px+postL.signX*T; // inner X edge of left post
+    const innerRightX=postR.px+postR.signX*T; // inner X edge of right post
+    const panelLeftX=Math.min(innerLeftX,innerRightX);
+    const panelRightX=Math.max(innerLeftX,innerRightX);
     const wallCenterZ=(ea[1]+eb[1])/2-fnz*T/2;
-    const doorLeftX=leftX+In(S.doorOffset);
+    const doorLeftX=panelLeftX+In(S.doorOffset);
     const doorRightX=doorLeftX+dW;
     const doorCX=doorLeftX+dW/2;
-    const frameW=In(2); // 2" frame on each side
+    const frameW=In(2);
+    const ep=.002;
 
-    // ── Split front wall into: left segment | door gap | right segment ──
-    const leftSegW=doorLeftX-frameW-leftX;
+    // ── Split front wall: left segment | door gap | right segment ──
+    const leftSegW=doorLeftX-frameW-(panelLeftX+ep);
     if(leftSegW>.01){
       const lsg=new THREE.BoxGeometry(leftSegW,wallH,T);
       const lPMat=makeExtMat();
-      setWorldSpaceUVs(lsg,leftX+leftSegW/2,fTop+wallH/2,wallCenterZ,leftSegW,wallH,T,true,0,1);
+      const lMidX=panelLeftX+ep+leftSegW/2;
+      setWorldSpaceUVs(lsg,lMidX,fTop+ep+wallH/2,wallCenterZ,leftSegW,wallH,T,true,0,1);
       const lMats=[intMat,intMat,intMat,intMat,lPMat,intMat];
       const lsm=new THREE.Mesh(lsg,lMats);
-      lsm.position.set(leftX+leftSegW/2,fTop+wallH/2,wallCenterZ);
+      lsm.position.set(lMidX,fTop+ep+wallH/2,wallCenterZ);
       lsm.castShadow=true;lsm.receiveShadow=true;cooler.add(lsm);
       lsm.userData={panelLetter:getPanelLetter(bestEdge,shapePoints,'left'),edgeIdx:bestEdge,segment:'left'};
       panelMeshes.push(lsm);
       const leg=new THREE.LineSegments(new THREE.EdgesGeometry(lsg),edgeMat);
       leg.position.copy(lsm.position);cooler.add(leg);
     }
-    const rightSegW=rightX-(doorRightX+frameW);
+    const rightSegW=(panelRightX-ep)-(doorRightX+frameW);
     if(rightSegW>.01){
       const rsg=new THREE.BoxGeometry(rightSegW,wallH,T);
       const rPMat=makeExtMat();
-      setWorldSpaceUVs(rsg,doorRightX+frameW+rightSegW/2,fTop+wallH/2,wallCenterZ,rightSegW,wallH,T,true,0,1);
+      const rMidX=doorRightX+frameW+rightSegW/2;
+      setWorldSpaceUVs(rsg,rMidX,fTop+ep+wallH/2,wallCenterZ,rightSegW,wallH,T,true,0,1);
       const rMats=[intMat,intMat,intMat,intMat,rPMat,intMat];
       const rsm=new THREE.Mesh(rsg,rMats);
-      rsm.position.set(doorRightX+frameW+rightSegW/2,fTop+wallH/2,wallCenterZ);
+      rsm.position.set(rMidX,fTop+ep+wallH/2,wallCenterZ);
       rsm.castShadow=true;rsm.receiveShadow=true;cooler.add(rsm);
       rsm.userData={panelLetter:getPanelLetter(bestEdge,shapePoints,'right'),edgeIdx:bestEdge,segment:'right'};
       panelMeshes.push(rsm);
       const reg=new THREE.LineSegments(new THREE.EdgesGeometry(rsg),edgeMat);
       reg.position.copy(rsm.position);cooler.add(reg);
     }
-    // Above door segment (no texture - uses interior material)
+    // Above door segment (no texture - uses interior material, lifted epsilon)
     const aboveH=wallH-dH;
     if(aboveH>.01){
       const asg=new THREE.BoxGeometry(dW+frameW*2,aboveH,T);
       const asm2=new THREE.Mesh(asg,intMat);
-      asm2.position.set(doorCX,fTop+dH+aboveH/2,wallCenterZ);
+      asm2.position.set(doorCX,fTop+.002+dH+aboveH/2,wallCenterZ);
       asm2.castShadow=true;cooler.add(asm2);
       const aeg=new THREE.LineSegments(new THREE.EdgesGeometry(asg),edgeMat);
       aeg.position.copy(asm2.position);cooler.add(aeg);
