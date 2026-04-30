@@ -32,9 +32,9 @@
   .right-panel.collapsed{margin-right:-360px}
   .right-panel::-webkit-scrollbar{width:4px}
   .right-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-  .panel-toggle{position:absolute;left:-24px;top:50%;transform:translateY(-50%);width:24px;height:56px;background:var(--panel-bg);border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-light);font-size:14px;font-weight:700;z-index:5;transition:color .2s}
+  .panel-toggle{position:fixed;right:360px;top:50%;transform:translateY(-50%);width:24px;height:56px;background:var(--panel-bg);border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-light);font-size:14px;font-weight:700;z-index:5;transition:right .3s ease,color .2s}
   .panel-toggle:hover{color:var(--accent)}
-  .right-panel.collapsed .panel-toggle{left:-24px}
+  .panel-toggle.collapsed{right:0}
   .panel-section{padding:20px 24px;border-bottom:1px solid var(--border)}
   .panel-page{display:none}
   .panel-page.active{display:block}
@@ -115,6 +115,8 @@
   @media(max-width:1024px){
     .right-panel{width:320px}
     .right-panel.collapsed{margin-right:-320px}
+    .panel-toggle{right:320px}
+    .panel-toggle.collapsed{right:0}
     .support-badge{display:none!important}
     .bottom-bar{display:none!important}
     .mobile-only{display:flex!important}
@@ -123,6 +125,8 @@
   @media(max-width:768px){
     .right-panel{width:300px}
     .right-panel.collapsed{margin-right:-300px}
+    .panel-toggle{right:300px}
+    .panel-toggle.collapsed{right:0}
     .top-nav{height:38px}
     .nav-tab{font-size:11px;padding:0 12px;height:38px}
     .left-toolbar{width:42px;padding:8px 0;gap:2px}
@@ -183,8 +187,9 @@
     <div id="panel-tooltip" style="position:absolute;display:none;pointer-events:none;z-index:10;background:rgba(15,23,42,0.9);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:6px 12px;border-radius:6px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.2)"></div>
     <div class="bottom-bar"><button><span style="font-size:16px;font-weight:300">+</span> Add Compartments/Refrig/Lights/BlueZone</button></div>
   </div>
+  <div class="panel-toggle" id="panel-toggle" title="Toggle Panel">&#8250;</div>
   <div class="right-panel" id="right-panel">
-    <div class="panel-toggle" id="panel-toggle" title="Toggle Panel">&#8250;</div>
+    <!-- PAGE: Walk-In Setup -->
     <!-- PAGE: Walk-In Setup -->
     <div class="panel-page active" data-page="setup">
       <div class="panel-section"><div class="section-label">Walk-In Type</div><div class="toggle-group"><button class="toggle-option" data-val="outdoor" id="type-outdoor">Outdoor Walk-In</button><button class="toggle-option active" data-val="indoor" id="type-indoor">Indoor Walk-In</button></div></div>
@@ -1768,10 +1773,10 @@ renderer.domElement.addEventListener('pointerleave',()=>{
 // Panel slide toggle
 document.getElementById('panel-toggle').addEventListener('click',()=>{
   const rp=document.getElementById('right-panel');
-  rp.classList.toggle('collapsed');
   const tog=document.getElementById('panel-toggle');
+  rp.classList.toggle('collapsed');
+  tog.classList.toggle('collapsed');
   tog.innerHTML=rp.classList.contains('collapsed')?'&#8249;':'&#8250;';
-  // Trigger resize after animation
   setTimeout(()=>{resize();},320);
 });
 
