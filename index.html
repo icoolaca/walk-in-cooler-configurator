@@ -1355,14 +1355,24 @@ function drawFloorPlan(){
     ctx.strokeStyle='#e11d48';ctx.lineWidth=4;ctx.lineCap='round';
     ctx.beginPath();ctx.moveTo(hingeC[0],hingeC[1]);ctx.lineTo(freeC[0],freeC[1]);ctx.stroke();
 
-    // Swing arc — outward means AWAY from centroid
-    // Front wall is at max Y of polygon. Centroid is above it (lower canvas Y).
-    // Outward = below the wall = higher canvas Y.
-    const arcRadius=doorW_px;
-    const outwardY=hingeC[1]+(hingeC[1]>centC[1]?1:-1)*arcRadius; // away from centroid
-    const goesDown=hingeC[1]>centC[1]; // true if outward is downward on canvas
+    // Swing arc — outward direction from winding-order edge normal
+    // Compute outward normal for the door edge using signed area
+    let sa2=0;
+    for(let si=0;si<pts.length;si++){
+      const sa=pts[si],sb=pts[(si+1)%pts.length];
+      sa2+=(sb[0]-sa[0])*(sb[1]+sa[1]);
+    }
+    const cw2=sa2>0;
+    const dEdx=eb[0]-ea[0],dEdz=eb[1]-ea[1];
+    const dEl=Math.sqrt(dEdx*dEdx+dEdz*dEdz)||1;
+    let dnx=dEdz/dEl,dnz=-dEdx/dEl;
+    if(cw2){dnx=-dnx;dnz=-dnz}
+    // dnz > 0 means outward is toward +Y in shape space = downward on canvas
+    const doorEdgeOutward=tr.toCanvas([ea[0]+dnx*10,ea[1]+dnz*10]);
+    const doorEdgeBase=tr.toCanvas([ea[0],ea[1]]);
+    const goesDown=doorEdgeOutward[1]>doorEdgeBase[1];
 
-    // Open position: door perpendicular to wall, pointing outward
+    const arcRadius=doorW_px;
     const openEndX=hingeC[0];
     const openEndY=goesDown?hingeC[1]+arcRadius:hingeC[1]-arcRadius;
 
