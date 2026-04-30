@@ -28,9 +28,13 @@
   .bottom-bar{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:10px;background:var(--panel-bg);padding:8px 16px;border-radius:10px;box-shadow:var(--panel-shadow);border:1px solid var(--border)}
   .bottom-bar button{font-family:'Outfit',sans-serif;font-size:13px;font-weight:500;padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--panel-bg);color:var(--text-mid);cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .15s}
   .bottom-bar button:hover{border-color:var(--accent);color:var(--accent)}
-  .right-panel{width:360px;background:var(--panel-bg);border-left:1px solid var(--border);overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+  .right-panel{width:360px;background:var(--panel-bg);border-left:1px solid var(--border);overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--border) transparent;z-index:4;position:relative;transition:margin-right .3s ease}
+  .right-panel.collapsed{margin-right:-360px}
   .right-panel::-webkit-scrollbar{width:4px}
   .right-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .panel-toggle{position:absolute;left:-24px;top:50%;transform:translateY(-50%);width:24px;height:56px;background:var(--panel-bg);border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-light);font-size:14px;font-weight:700;z-index:5;transition:color .2s}
+  .panel-toggle:hover{color:var(--accent)}
+  .right-panel.collapsed .panel-toggle{left:-24px}
   .panel-section{padding:20px 24px;border-bottom:1px solid var(--border)}
   .panel-page{display:none}
   .panel-page.active{display:block}
@@ -98,6 +102,36 @@
   .shape-btn.active .shape-btn-label{color:var(--accent)}
   #edge-sliders .slider-row{margin-bottom:14px}
   .texture-zone{margin-top:12px;border:2px dashed var(--border);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;background:var(--input-bg)}
+  /* Mobile toolbar items - hidden on desktop */
+  .mobile-only{display:none!important}
+  .tool-btn.tool-btn-wide{width:auto;padding:0 10px;gap:4px;font-size:10px;font-weight:600;color:var(--text-mid)}
+  .tool-btn.tool-btn-wide svg{width:14px;height:14px;flex-shrink:0}
+  .tool-btn.tool-help{background:var(--accent);color:#fff;border-radius:50%}
+  .tool-btn.tool-help:hover{background:var(--accent-hover)}
+  .tool-btn.tool-support{background:var(--danger);color:#fff;border-radius:var(--radius);font-size:9px;font-weight:700;width:auto;padding:0 8px;height:30px}
+  .tool-btn.tool-support:hover{opacity:.9}
+  .tool-divider{width:28px;height:1px;background:var(--border);margin:4px 0}
+  /* Tablet: ≤1024px */
+  @media(max-width:1024px){
+    .right-panel{width:320px}
+    .right-panel.collapsed{margin-right:-320px}
+    .support-badge{display:none!important}
+    .bottom-bar{display:none!important}
+    .mobile-only{display:flex!important}
+  }
+  /* Mobile: ≤768px */
+  @media(max-width:768px){
+    .right-panel{width:300px}
+    .right-panel.collapsed{margin-right:-300px}
+    .top-nav{height:38px}
+    .nav-tab{font-size:11px;padding:0 12px;height:38px}
+    .left-toolbar{width:42px;padding:8px 0;gap:2px}
+    .tool-btn{width:32px;height:32px}
+    .tool-btn svg{width:15px;height:15px}
+    .footer-bar{height:46px;padding:0 12px}
+    .footer-brand .product{font-size:14px}
+    .btn{font-size:12px;padding:7px 14px}
+  }
   .texture-zone:hover,.texture-zone.dragover{border-color:var(--accent);background:var(--accent-bg)}
   .texture-zone-label{font-size:11px;color:var(--text-light);line-height:1.5;pointer-events:none}
   .texture-zone-label strong{color:var(--text-mid);font-weight:600}
@@ -133,6 +167,13 @@
     <button class="tool-btn" title="Play Auto-Rotate" id="btn-auto-rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="icon-pause" style="display:none"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" id="icon-play"><polygon points="6,4 20,12 6,20"/></svg></button>
     <button class="tool-btn" title="Orbit Light" id="btn-light-orbit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button>
     <div style="flex:1"></div>
+    <!-- Mobile-only: add compartments button -->
+    <button class="tool-btn mobile-only" title="Add Compartments" id="btn-add-mobile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+    <div class="tool-divider mobile-only"></div>
+    <!-- Mobile-only: help & support -->
+    <button class="tool-btn tool-help mobile-only" title="Help">?</button>
+    <button class="tool-btn tool-support mobile-only" title="Support">SOS</button>
+    <div class="tool-divider mobile-only"></div>
     <button class="tool-btn" title="Reset View" id="btn-reset-view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 3 3 9 9 9"/></svg></button>
     <button class="tool-btn" title="Save Screenshot" id="btn-screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
   </div>
@@ -143,6 +184,7 @@
     <div class="bottom-bar"><button><span style="font-size:16px;font-weight:300">+</span> Add Compartments/Refrig/Lights/BlueZone</button></div>
   </div>
   <div class="right-panel" id="right-panel">
+    <div class="panel-toggle" id="panel-toggle" title="Toggle Panel">&#8250;</div>
     <!-- PAGE: Walk-In Setup -->
     <div class="panel-page active" data-page="setup">
       <div class="panel-section"><div class="section-label">Walk-In Type</div><div class="toggle-group"><button class="toggle-option" data-val="outdoor" id="type-outdoor">Outdoor Walk-In</button><button class="toggle-option active" data-val="indoor" id="type-indoor">Indoor Walk-In</button></div></div>
@@ -1721,6 +1763,16 @@ renderer.domElement.addEventListener('pointermove',e=>{
 renderer.domElement.addEventListener('pointerleave',()=>{
   if(hoveredPanel&&hoveredOrigMat){hoveredPanel.material=hoveredOrigMat;hoveredPanel=null;hoveredOrigMat=null}
   tooltip.style.display='none';
+});
+
+// Panel slide toggle
+document.getElementById('panel-toggle').addEventListener('click',()=>{
+  const rp=document.getElementById('right-panel');
+  rp.classList.toggle('collapsed');
+  const tog=document.getElementById('panel-toggle');
+  tog.innerHTML=rp.classList.contains('collapsed')?'&#8249;':'&#8250;';
+  // Trigger resize after animation
+  setTimeout(()=>{resize();},320);
 });
 
 // Light orbit toggle
