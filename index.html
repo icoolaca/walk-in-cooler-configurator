@@ -111,6 +111,8 @@
   .tool-btn.tool-support{background:var(--danger);color:#fff;border-radius:var(--radius);font-size:9px;font-weight:700;width:auto;padding:0 8px;height:30px}
   .tool-btn.tool-support:hover{opacity:.9}
   .tool-divider{width:28px;height:1px;background:var(--border);margin:4px 0}
+  .import-status{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(15,23,42,.9);color:#fff;font-family:'Outfit',sans-serif;font-size:12px;font-weight:500;padding:8px 18px;border-radius:8px;display:none;white-space:nowrap;pointer-events:none}
+  .import-status.active{display:block}
   /* Tablet: ≤1024px */
   @media(max-width:1024px){
     .right-panel{width:320px}
@@ -180,12 +182,15 @@
     <div class="tool-divider mobile-only"></div>
     <button class="tool-btn" title="Reset View" id="btn-reset-view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 3 3 9 9 9"/></svg></button>
     <button class="tool-btn" title="Save Screenshot" id="btn-screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+    <button class="tool-btn" title="Import 3D Object (.glb / .obj)" id="btn-import-3d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></button>
+    <input type="file" id="import-3d-file" accept=".glb,.gltf,.obj" style="display:none">
   </div>
   <div class="canvas-area" id="canvas-area">
     <canvas id="axis-gizmo" width="120" height="120" style="position:absolute;top:12px;left:12px;z-index:3;pointer-events:none;width:5rem!important;height:5rem!important;"></canvas>
     <div class="support-badge"><button class="badge-btn badge-help">?</button><button class="badge-btn badge-support">Support</button></div>
     <div id="panel-tooltip" style="position:absolute;display:none;pointer-events:none;z-index:10;background:rgba(15,23,42,0.9);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:6px 12px;border-radius:6px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.2)"></div>
     <div class="bottom-bar"><button><span style="font-size:16px;font-weight:300">+</span> Add Compartments/Refrig/Lights/BlueZone</button></div>
+    <div class="import-status" id="import-status">Click to place · Scroll to resize · ESC to cancel</div>
   </div>
   <div class="panel-toggle" id="panel-toggle" title="Toggle Panel">&#8250;</div>
   <div class="right-panel" id="right-panel">
@@ -273,6 +278,43 @@
   <div class="footer-actions"><button class="btn btn-ghost">Save Draft</button><button class="btn btn-primary">Request Quote / Revit</button></div>
 </footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Minimal OBJLoader for Three.js r128
+THREE.OBJLoader=function(manager){this.manager=manager||THREE.DefaultLoadingManager};
+THREE.OBJLoader.prototype={constructor:THREE.OBJLoader,load:function(url,onLoad,onProgress,onError){
+  const scope=this;const loader=new THREE.FileLoader(this.manager);loader.setPath(this.path||'');
+  loader.load(url,function(text){try{onLoad(scope.parse(text))}catch(e){if(onError)onError(e);else console.error(e)}},onProgress,onError);
+},setPath:function(v){this.path=v;return this},
+parse:function(text){
+  const lines=text.split('\n');const vertices=[],normals=[],uvs=[];
+  const geo=new THREE.BufferGeometry();const vArr=[],nArr=[],uArr=[];
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i].trim();if(!line||line[0]==='#')continue;
+    const parts=line.split(/\s+/);const key=parts[0];
+    if(key==='v')vertices.push(parseFloat(parts[1]),parseFloat(parts[2]),parseFloat(parts[3]));
+    else if(key==='vn')normals.push(parseFloat(parts[1]),parseFloat(parts[2]),parseFloat(parts[3]));
+    else if(key==='vt')uvs.push(parseFloat(parts[1]),parseFloat(parts[2]));
+    else if(key==='f'){
+      const face=[];for(let j=1;j<parts.length;j++){
+        const idx=parts[j].split('/');
+        const vi=(parseInt(idx[0])-1)*3;
+        vArr.push(vertices[vi],vertices[vi+1],vertices[vi+2]);
+        if(idx[1]&&uvs.length){const ui=(parseInt(idx[1])-1)*2;uArr.push(uvs[ui],uvs[ui+1])}
+        if(idx[2]&&normals.length){const ni=(parseInt(idx[2])-1)*3;nArr.push(normals[ni],normals[ni+1],normals[ni+2])}
+        face.push(vArr.length/3-1);
+      }
+      for(let j=1;j<face.length-1;j++){/* triangulate */}
+    }
+  }
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(vArr,3));
+  if(nArr.length)geo.setAttribute('normal',new THREE.Float32BufferAttribute(nArr,3));
+  else geo.computeVertexNormals();
+  if(uArr.length)geo.setAttribute('uv',new THREE.Float32BufferAttribute(uArr,2));
+  const mat=new THREE.MeshStandardMaterial({color:0xaaaaaa,roughness:.5,metalness:.2});
+  const mesh=new THREE.Mesh(geo,mat);
+  const group=new THREE.Group();group.add(mesh);return group;
+}};
+</script>
 <script>
 // ═══════════════════════════════════════════════════════
 // OrbitControls
@@ -1798,6 +1840,267 @@ btnLO.addEventListener('click',()=>{
   lightOrbit=!lightOrbit;
   btnLO.classList.toggle('active',lightOrbit);
   btnLO.title=lightOrbit?'Stop Light Orbit':'Orbit Light';
+});
+
+// ═══════════════════════════════════════════════════════
+// 3D Object Import System
+// ═══════════════════════════════════════════════════════
+const importedObjects=[];
+let placementObject=null; // object being placed (follows mouse)
+let selectedObject=null;  // currently selected placed object
+let isDraggingObject=false;
+let selectionBox=null;    // wireframe bounding box for selected object
+const groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0); // Y=0 ground
+const importMouse=new THREE.Vector2();
+const importRay=new THREE.Raycaster();
+
+const importFileInput=document.getElementById('import-3d-file');
+const importStatus=document.getElementById('import-status');
+
+// Button click
+document.getElementById('btn-import-3d').addEventListener('click',()=>importFileInput.click());
+
+// File selected
+importFileInput.addEventListener('change',e=>{
+  const file=e.target.files&&e.target.files[0];
+  if(!file)return;
+  loadImportFile(file);
+  importFileInput.value='';
+});
+
+function loadImportFile(file){
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='obj'){
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        const loader=new THREE.OBJLoader();
+        const obj=loader.parse(ev.target.result);
+        startPlacement(obj,file.name);
+      }catch(err){console.error('OBJ parse error:',err)}
+    };
+    reader.readAsText(file);
+  } else if(ext==='glb'||ext==='gltf'){
+    if(typeof THREE.GLTFLoader==='undefined'){
+      // GLTFLoader not available — show placeholder
+      const geo=new THREE.BoxGeometry(2,2,2);
+      const mat=new THREE.MeshStandardMaterial({color:0x6699cc,roughness:.4});
+      const mesh=new THREE.Mesh(geo,mat);
+      const g=new THREE.Group();g.add(mesh);
+      startPlacement(g,file.name+' (GLB placeholder — use .obj for full geometry)');
+      return;
+    }
+    try{
+      const url=URL.createObjectURL(file);
+      const gltfLoader=new THREE.GLTFLoader();
+      gltfLoader.load(url,gltf=>{
+        URL.revokeObjectURL(url);
+        startPlacement(gltf.scene,file.name);
+      },undefined,err=>{
+        URL.revokeObjectURL(url);
+        console.error('GLB load error:',err);
+        // Fallback: show placeholder
+        const geo=new THREE.BoxGeometry(2,2,2);
+        const mat=new THREE.MeshStandardMaterial({color:0x6699cc,roughness:.4});
+        const mesh=new THREE.Mesh(geo,mat);
+        const g=new THREE.Group();g.add(mesh);
+        startPlacement(g,file.name+' (placeholder)');
+      });
+    }catch(err){console.error('GLB error:',err)}
+  }
+}
+
+// Also support drag-drop on canvas
+container.addEventListener('dragover',e=>{
+  if(e.dataTransfer.types.includes('Files')){e.preventDefault();e.dataTransfer.dropEffect='copy'}
+});
+container.addEventListener('drop',e=>{
+  e.preventDefault();
+  const file=e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(!file)return;
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext!=='glb'&&ext!=='gltf'&&ext!=='obj')return;
+  loadImportFile(file);
+});
+
+function startPlacement(obj,name){
+  // Normalize: center at origin, scale to reasonable size
+  const box=new THREE.Box3().setFromObject(obj);
+  const size=new THREE.Vector3();box.getSize(size);
+  const center=new THREE.Vector3();box.getCenter(center);
+  obj.position.sub(center); // center at origin
+  // Scale to fit roughly 3ft if too large
+  const maxDim=Math.max(size.x,size.y,size.z);
+  if(maxDim>10) obj.scale.multiplyScalar(3/maxDim);
+  if(maxDim<.1) obj.scale.multiplyScalar(1/maxDim);
+
+  // Make semi-transparent during placement
+  obj.traverse(c=>{
+    if(c.isMesh){
+      c.castShadow=true;c.receiveShadow=true;
+      if(c.material){
+        c.material=c.material.clone();
+        c.material.transparent=true;c.material.opacity=.6;
+      }
+    }
+  });
+
+  obj.userData={importedName:name,isImported:true,baseScale:obj.scale.clone()};
+  scene.add(obj);
+  placementObject=obj;
+  importStatus.classList.add('active');
+  ctrl.enabled=false; // disable orbit during placement
+}
+
+function finishPlacement(){
+  if(!placementObject)return;
+  // Restore full opacity
+  placementObject.traverse(c=>{
+    if(c.isMesh&&c.material){c.material.transparent=false;c.material.opacity=1;c.material.needsUpdate=true}
+  });
+  importedObjects.push(placementObject);
+  placementObject=null;
+  importStatus.classList.remove('active');
+  ctrl.enabled=true;
+}
+
+function cancelPlacement(){
+  if(!placementObject)return;
+  scene.remove(placementObject);
+  placementObject=null;
+  importStatus.classList.remove('active');
+  ctrl.enabled=true;
+}
+
+function selectObject(obj){
+  deselectObject();
+  selectedObject=obj;
+  // Add bounding box wireframe
+  const box=new THREE.Box3().setFromObject(obj);
+  const helper=new THREE.Box3Helper(box,0x0891b2);
+  scene.add(helper);
+  selectionBox=helper;
+}
+
+function deselectObject(){
+  if(selectionBox){scene.remove(selectionBox);selectionBox=null}
+  selectedObject=null;
+}
+
+function updateSelectionBox(){
+  if(!selectedObject||!selectionBox)return;
+  scene.remove(selectionBox);
+  const box=new THREE.Box3().setFromObject(selectedObject);
+  const helper=new THREE.Box3Helper(box,0x0891b2);
+  scene.add(helper);
+  selectionBox=helper;
+}
+
+function getGroundPoint(e){
+  const rect=renderer.domElement.getBoundingClientRect();
+  importMouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+  importMouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  importRay.setFromCamera(importMouse,camera);
+  const pt=new THREE.Vector3();
+  importRay.ray.intersectPlane(groundPlane,pt);
+  return pt;
+}
+
+// Mouse handlers for placement and dragging
+renderer.domElement.addEventListener('pointerdown',e=>{
+  if(placementObject){
+    // Placing mode: click to place
+    finishPlacement();
+    return;
+  }
+
+  // Check if clicking on an imported object
+  const rect=renderer.domElement.getBoundingClientRect();
+  importMouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+  importMouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  importRay.setFromCamera(importMouse,camera);
+
+  // Collect all imported meshes
+  const importedMeshes=[];
+  importedObjects.forEach(obj=>{obj.traverse(c=>{if(c.isMesh)importedMeshes.push(c)})});
+
+  if(importedMeshes.length>0){
+    const hits=importRay.intersectObjects(importedMeshes,false);
+    if(hits.length>0){
+      // Find the parent imported object
+      let hitObj=hits[0].object;
+      while(hitObj.parent&&!hitObj.userData.isImported)hitObj=hitObj.parent;
+      if(hitObj.userData.isImported){
+        selectObject(hitObj);
+        isDraggingObject=true;
+        ctrl.enabled=false;
+        e.stopPropagation();
+        return;
+      }
+    }
+  }
+
+  // Clicked on nothing — deselect
+  if(selectedObject&&!isDraggingObject)deselectObject();
+});
+
+renderer.domElement.addEventListener('pointermove',e=>{
+  const pt=getGroundPoint(e);
+  if(!pt)return;
+
+  if(placementObject){
+    // Follow mouse on ground plane
+    placementObject.position.set(pt.x,0,pt.z);
+    return;
+  }
+
+  if(isDraggingObject&&selectedObject){
+    selectedObject.position.set(pt.x,0,pt.z);
+    updateSelectionBox();
+  }
+});
+
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(isDraggingObject){
+    isDraggingObject=false;
+    ctrl.enabled=true;
+    updateSelectionBox();
+  }
+});
+
+// Scroll to resize during placement or when object selected
+renderer.domElement.addEventListener('wheel',e=>{
+  const target=placementObject||selectedObject;
+  if(!target)return;
+  if(!placementObject&&!selectedObject)return;
+  // Only intercept if we have something to scale
+  if(placementObject||(selectedObject&&e.shiftKey)){
+    e.preventDefault();e.stopPropagation();
+    const factor=e.deltaY>0?0.95:1.05;
+    target.scale.multiplyScalar(factor);
+    // Clamp scale
+    const bs=target.userData.baseScale;
+    const maxS=bs.x*10,minS=bs.x*0.1;
+    if(target.scale.x>maxS)target.scale.set(maxS,maxS,maxS);
+    if(target.scale.x<minS)target.scale.set(minS,minS,minS);
+    if(selectedObject)updateSelectionBox();
+  }
+},{passive:false});
+
+// ESC to cancel placement or deselect
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(placementObject)cancelPlacement();
+    else if(selectedObject)deselectObject();
+  }
+  if(e.key==='Delete'||e.key==='Backspace'){
+    if(selectedObject){
+      const idx=importedObjects.indexOf(selectedObject);
+      if(idx>=0)importedObjects.splice(idx,1);
+      scene.remove(selectedObject);
+      deselectObject();
+    }
+  }
 });
 
 // Render loop
