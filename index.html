@@ -257,22 +257,65 @@
 })();
 
 // ═══════════════════════════════════════════════════════
-// Shape definitions (2D top-view polygons in inches)
+// Shape system: parametric bounding box + notch
 // ═══════════════════════════════════════════════════════
-// Shape definitions: points define the OUTSIDE face of the compartment
-// All measurements are outer-to-outer dimensions
-const SHAPES = {
-  "Rectangle":      [[0,0],[150,0],[150,150],[0,150]],
-  "Cut-out A":      [[0,0],[150,0],[150,120],[120,120],[120,150],[0,150]],
-  "Cut-out B":      [[0,0],[150,0],[150,150],[30,150],[30,120],[0,120]],
-  "Cut-out C":      [[30,0],[150,0],[150,150],[0,150],[0,30],[30,30]],
-  "Cut-out D":      [[0,0],[120,0],[120,30],[150,30],[150,150],[0,150]],
-  "Cut-out E":      [[0,0],[150,0],[150,150],[105,150],[105,120],[45,120],[45,150],[0,150]],
-  "Cut-out F":      [[0,0],[150,0],[150,150],[0,150],[0,105],[30,105],[30,45],[0,45]],
-  "Cut-out G":      [[0,0],[150,0],[150,45],[120,45],[120,105],[150,105],[150,150],[0,150]],
-  "Cut-out H":      [[0,0],[150,0],[150,90],[90,90],[90,150],[0,150]],
-  "Cut-out I":      [[60,0],[150,0],[150,150],[0,150],[0,60],[60,60]]
+// Each shape is defined by:
+//   w, d = bounding box width and depth (inches), min 72, max 360
+//   nw, nd = notch width and depth as fraction (0-1), default ~0.2
+//   notch = position string: 'none','tr','bl','tl','br','bc','ml','mr','br-lg','tl-lg'
+const SHAPE_PARAMS = {
+  "Rectangle":  {notch:'none',  nw:0, nd:0},
+  "Cut-out A":  {notch:'tr',    nw:.20, nd:.20},
+  "Cut-out B":  {notch:'bl',    nw:.20, nd:.20},
+  "Cut-out C":  {notch:'tl',    nw:.20, nd:.20},
+  "Cut-out D":  {notch:'br',    nw:.20, nd:.20},
+  "Cut-out E":  {notch:'bc',    nw:.40, nd:.20},
+  "Cut-out F":  {notch:'ml',    nw:.20, nd:.40},
+  "Cut-out G":  {notch:'mr',    nw:.20, nd:.40},
+  "Cut-out H":  {notch:'br-lg', nw:.40, nd:.40},
+  "Cut-out I":  {notch:'tl-lg', nw:.40, nd:.40}
 };
+
+// Default notch ranges per shape (adjustable later)
+const NOTCH_RANGES = {
+  "Rectangle":  {nwMin:0,nwMax:0,ndMin:0,ndMax:0},
+  "Cut-out A":  {nwMin:.15,nwMax:.50,ndMin:.15,ndMax:.50},
+  "Cut-out B":  {nwMin:.15,nwMax:.50,ndMin:.15,ndMax:.50},
+  "Cut-out C":  {nwMin:.15,nwMax:.50,ndMin:.15,ndMax:.50},
+  "Cut-out D":  {nwMin:.15,nwMax:.50,ndMin:.15,ndMax:.50},
+  "Cut-out E":  {nwMin:.20,nwMax:.60,ndMin:.15,ndMax:.50},
+  "Cut-out F":  {nwMin:.15,nwMax:.50,ndMin:.20,ndMax:.60},
+  "Cut-out G":  {nwMin:.15,nwMax:.50,ndMin:.20,ndMax:.60},
+  "Cut-out H":  {nwMin:.20,nwMax:.60,ndMin:.20,ndMax:.60},
+  "Cut-out I":  {nwMin:.20,nwMax:.60,ndMin:.20,ndMax:.60}
+};
+
+// Generate shape points from parameters
+function generateShapePoints(shapeName, w, d, nwFrac, ndFrac){
+  const p=SHAPE_PARAMS[shapeName];
+  if(!p)return [[0,0],[w,0],[w,d],[0,d]];
+  const nw=Math.round(w*nwFrac), nd=Math.round(d*ndFrac);
+  switch(p.notch){
+    case 'none': return [[0,0],[w,0],[w,d],[0,d]];
+    case 'tr':   return [[0,0],[w,0],[w,d-nd],[w-nw,d-nd],[w-nw,d],[0,d]];
+    case 'bl':   return [[0,0],[w,0],[w,d],[nw,d],[nw,d-nd],[0,d-nd]];
+    case 'tl':   return [[nw,0],[w,0],[w,d],[0,d],[0,nd],[nw,nd]];
+    case 'br':   return [[0,0],[w-nw,0],[w-nw,nd],[w,nd],[w,d],[0,d]];
+    case 'bc':   return [[0,0],[w,0],[w,d],[(w+nw)/2,d],[(w+nw)/2,d-nd],[(w-nw)/2,d-nd],[(w-nw)/2,d],[0,d]];
+    case 'ml':   return [[0,0],[w,0],[w,d],[0,d],[0,(d+nd)/2],[nw,(d+nd)/2],[nw,(d-nd)/2],[0,(d-nd)/2]];
+    case 'mr':   return [[0,0],[w,0],[w,(d-nd)/2],[w-nw,(d-nd)/2],[w-nw,(d+nd)/2],[w,(d+nd)/2],[w,d],[0,d]];
+    case 'br-lg':return [[0,0],[w,0],[w,d-nd],[w-nw,d-nd],[w-nw,d],[0,d]]; // same as tr but larger
+    case 'tl-lg':return [[nw,0],[w,0],[w,d],[0,d],[0,nd],[nw,nd]]; // same as tl but larger
+    default: return [[0,0],[w,0],[w,d],[0,d]];
+  }
+}
+
+// Static SHAPES for the shape grid SVG thumbnails (generated at default 150x150)
+const SHAPES = {};
+Object.keys(SHAPE_PARAMS).forEach(name=>{
+  const p=SHAPE_PARAMS[name];
+  SHAPES[name]=generateShapePoints(name,150,150,p.nw,p.nd);
+});
 
 // ═══════════════════════════════════════════════════════
 // State
@@ -281,13 +324,16 @@ const S = {
   type:'indoor', temperature:'cooler',
   finish:'stucco-aluminum', finishColor:'#c4c8cc',
   shape:'Rectangle', height:100, wallT:4,
+  boxW:150, boxD:150, // bounding box width and depth (inches)
+  notchW:.20, notchD:.20, // notch fractions
   doorWidth:34, doorOffset:19, doorSwing:'right',
   floor:'standard', ramp:'interior',
   autoRotate:false, showDims:true, wireframe:false,
   texScale:5, texRotation:0, texFit:'tile', texRepeatX:true, texRepeatY:true, texGap:0,
 };
 // Deep copy of current shape points (user can adjust edges)
-let shapePoints = JSON.parse(JSON.stringify(SHAPES[S.shape]));
+let shapePoints = generateShapePoints(S.shape,S.boxW,S.boxD,S.notchW,S.notchD);
+let storedDoorEdge = -1; // locked door edge index, set when shape is first selected
 
 const In=i=>i/12;
 const fmtFtIn=i=>{const f=Math.floor(i/12),n=Math.round(i%12);return f+"' "+n+'"'};
@@ -428,22 +474,39 @@ function addDim(p1,p2,label,offV,sc2){
 // ═══════════════════════════════════════════════════════
 // BUILD (per-panel wall construction)
 // ═══════════════════════════════════════════════════════
-// Helper: find door wall edge index
-function getDoorEdge(pts){
+// Helper: compute door wall edge from shape points (used only when shape changes)
+function computeDoorEdge(pts){
   let doorEdge=-1,dLen=0;
-  let cx2=0,cz2=0;
-  pts.forEach(p=>{cx2+=p[0];cz2+=p[1]});cx2/=pts.length;cz2/=pts.length;
+  // Use polygon winding to determine outward direction instead of centroid
+  // Compute signed area to determine winding direction
+  let signedArea=0;
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i],b=pts[(i+1)%pts.length];
+    signedArea+=(b[0]-a[0])*(b[1]+a[1]);
+  }
+  const cw=signedArea>0; // clockwise if positive in screen coords
+
   for(let i=0;i<pts.length;i++){
     const a=pts[i],b=pts[(i+1)%pts.length];
     const dx=b[0]-a[0],dz=b[1]-a[1];
     const el=Math.sqrt(dx*dx+dz*dz);
-    const ih=Math.abs(dx)>Math.abs(dz)*2;
-    let nx=dz,nz=-dx;const nl=Math.sqrt(nx*nx+nz*nz)||1;nx/=nl;nz/=nl;
-    const mx=(a[0]+b[0])/2,mz=(a[1]+b[1])/2;
-    if(nx*(mx-cx2)+nz*(mz-cz2)<0){nx=-nx;nz=-nz}
-    if(ih&&nz>.5&&el>dLen){dLen=el;doorEdge=i}
+    const ih=Math.abs(dx)>Math.abs(dz)*2; // horizontal edge
+    if(!ih)continue;
+    // Outward normal based on winding
+    let nx=dz,nz=-dx;
+    const nl=Math.sqrt(nx*nx+nz*nz)||1;nx/=nl;nz/=nl;
+    if(cw){nx=-nx;nz=-nz} // flip for CW winding
+    // Front-facing = normal points toward +Y in shape space (max Y = front)
+    if(nz>.5&&el>dLen){dLen=el;doorEdge=i}
   }
   return doorEdge>=0?doorEdge:0;
+}
+
+// Helper: get stored door edge (locked when shape is selected)
+function getDoorEdge(pts){
+  if(storedDoorEdge>=0&&storedDoorEdge<pts.length)return storedDoorEdge;
+  storedDoorEdge=computeDoorEdge(pts);
+  return storedDoorEdge;
 }
 
 // Helper: get panel letter for an edge index
@@ -491,18 +554,26 @@ function build(){
   const fp=pts.map(p=>[(p[0]-cx)/12,(p[1]-cz)/12]);
   const W=(maxX-minX)/12,D=(maxZ-minZ)/12;
 
-  // Polygon centroid
+  // Polygon centroid (still used for floor plan editor)
   let centX=0,centZ=0;
   fp.forEach(p=>{centX+=p[0];centZ+=p[1]});
   centX/=fp.length;centZ/=fp.length;
 
-  // Helper: compute outward normal for an edge
+  // Determine polygon winding direction using signed area
+  let signedArea=0;
+  for(let i=0;i<fp.length;i++){
+    const a=fp[i],b=fp[(i+1)%fp.length];
+    signedArea+=(b[0]-a[0])*(b[1]+a[1]);
+  }
+  const cwWinding=signedArea>0;
+
+  // Helper: compute outward normal for an edge using winding order
   function edgeNormal(a,b){
     const dx=b[0]-a[0],dz=b[1]-a[1];
     const l=Math.sqrt(dx*dx+dz*dz)||1;
     let nx=dz/l,nz=-dx/l;
-    const mx=(a[0]+b[0])/2,mz=(a[1]+b[1])/2;
-    if(nx*(mx-centX)+nz*(mz-centZ)<0){nx=-nx;nz=-nz}
+    // Flip based on winding: CW polygon has inward normals by default with this formula
+    if(cwWinding){nx=-nx;nz=-nz}
     return [nx,nz];
   }
 
@@ -553,34 +624,30 @@ function build(){
   }
 
   // ── Walls: corner posts + panels between them ──
-  // Each vertex gets a T×T corner post, outer corner aligned to shape point.
-  // Each edge gets a panel that spans between adjacent posts.
-  // This guarantees no gaps and no overlaps at any corner type.
-
-  // Step 1: Compute corner post positions
-  // Each post's outer corner sits at the shape point fp[i].
-  // The post extends T inward in the direction toward the polygon centroid.
-  const postPositions=[]; // center of each T×T post
+  // Step 1: Compute corner post positions and detect inside/outside corners
+  const postPositions=[];
+  const isInsideCorner=[]; // true if vertex is an inside (concave) corner
   for(let i=0;i<fp.length;i++){
     const p=fp[i];
     const prev=fp[(i-1+fp.length)%fp.length], next=fp[(i+1)%fp.length];
-    // Determine which quadrant the post extends into from the outer corner
-    // Use the two adjacent edge directions to figure out the inward diagonal
+    // Cross product to detect inside vs outside corner
+    const d1x=p[0]-prev[0],d1z=p[1]-prev[1];
+    const d2x=next[0]-p[0],d2z=next[1]-p[1];
+    const cross=d1x*d2z-d1z*d2x;
+    const inside=cwWinding?cross>0:cross<0;
+    isInsideCorner.push(inside);
+
     const [n1x,n1z]=edgeNormal(prev,p);
     const [n2x,n2z]=edgeNormal(p,next);
-    // Inward direction = average of the two inward normals (negated outward normals)
     let ix=-(n1x+n2x),iz=-(n1z+n2z);
     const il=Math.sqrt(ix*ix+iz*iz)||1;
     ix/=il;iz/=il;
-    // Post center is T/2 inward along both X and Z from the corner point
-    // But we need it axis-aligned, so figure out which way X and Z go
     const signX=ix>0?1:ix<0?-1:0;
     const signZ=iz>0?1:iz<0?-1:0;
     const cx=p[0]+signX*T/2;
     const cz=p[1]+signZ*T/2;
-    postPositions.push({x:cx,z:cz,signX,signZ,px:p[0],pz:p[1]});
+    postPositions.push({x:cx,z:cz,signX,signZ,px:p[0],pz:p[1],inside});
 
-    // Draw corner post (no texture - uses interior material, lifted epsilon above floor)
     const postGeo=new THREE.BoxGeometry(T,wallH,T);
     const post=new THREE.Mesh(postGeo,intMat);
     post.position.set(cx,fTop+.002+wallH/2,cz);
@@ -591,32 +658,37 @@ function build(){
     peg.position.copy(post.position);cooler.add(peg);
   }
 
-  // Step 2: Panels between adjacent posts (skip front wall - handled by door section)
-  // First, find front wall edge index
-  let bestEdgeIdx=-1,bLen=0;
-  for(let i=0;i<fp.length;i++){
-    const a=fp[i],b=fp[(i+1)%fp.length];
-    const ddx=b[0]-a[0],ddz=b[1]-a[1];
-    const el=Math.sqrt(ddx*ddx+ddz*ddz);
-    const ih=Math.abs(ddx)>Math.abs(ddz)*2;
-    const [nnx,nnz]=edgeNormal(a,b);
-    if(ih&&nnz>.5&&el>bLen){bLen=el;bestEdgeIdx=i}
-  }
+  // Step 2: Panels between adjacent posts
+  const bestEdgeIdx=getDoorEdge(shapePoints);
 
   for(let i=0;i<fp.length;i++){
-    if(i===bestEdgeIdx)continue; // skip front wall - door section handles it
+    if(i===bestEdgeIdx)continue;
     const a=fp[i],b=fp[(i+1)%fp.length];
     const postA=postPositions[i],postB=postPositions[(i+1)%fp.length];
     const dx=b[0]-a[0],dz=b[1]-a[1];
     const isHoriz=Math.abs(dx)>=Math.abs(dz);
     const [nx,nz]=edgeNormal(a,b);
+    const ep=.002;
 
     if(isHoriz){
-      const postA_innerX=postA.px + postA.signX*T;
-      const postB_innerX=postB.px + postB.signX*T;
-      const ep=.002; // epsilon gap to prevent Z-fighting with posts
-      const x1=Math.min(postA_innerX,postB_innerX)+ep;
-      const x2=Math.max(postA_innerX,postB_innerX)-ep;
+      // Horizontal panel: spans along X between posts, T thick in Z
+      let x1,x2;
+      // At each end, if the corner is inside, the post inner X might point wrong way
+      // Use the actual post inner edge that faces toward the OTHER post
+      if(postA.px<postB.px){
+        x1=postA.px+Math.abs(postA.signX)*T+ep;
+        x2=postB.px-Math.abs(postB.signX)*T-ep;
+      } else {
+        x1=postB.px+Math.abs(postB.signX)*T+ep;
+        x2=postA.px-Math.abs(postA.signX)*T-ep;
+      }
+      // For inside corners, the signX might push the inner edge outward
+      // Fix: use the actual post center +/- T/2 toward the panel
+      const pAx_inner=postA.px<postB.px ? postA.x+T/2 : postA.x-T/2;
+      const pBx_inner=postA.px<postB.px ? postB.x-T/2 : postB.x+T/2;
+      x1=Math.min(pAx_inner,pBx_inner)+ep;
+      x2=Math.max(pAx_inner,pBx_inner)-ep;
+
       const panelW=x2-x1;
       if(panelW<.01)continue;
       const midX=(x1+x2)/2;
@@ -633,11 +705,13 @@ function build(){
       const eg=new THREE.LineSegments(new THREE.EdgesGeometry(wallGeo),edgeMat);
       eg.position.copy(wall.position);cooler.add(eg);
     } else {
-      const postA_innerZ=postA.pz + postA.signZ*T;
-      const postB_innerZ=postB.pz + postB.signZ*T;
-      const ep=.002;
-      const z1=Math.min(postA_innerZ,postB_innerZ)+ep;
-      const z2=Math.max(postA_innerZ,postB_innerZ)-ep;
+      // Vertical panel: spans along Z between posts, T thick in X
+      let z1,z2;
+      const pAz_inner=postA.pz<postB.pz ? postA.z+T/2 : postA.z-T/2;
+      const pBz_inner=postA.pz<postB.pz ? postB.z-T/2 : postB.z+T/2;
+      z1=Math.min(pAz_inner,pBz_inner)+ep;
+      z2=Math.max(pAz_inner,pBz_inner)-ep;
+
       const panelD=z2-z1;
       if(panelD<.01)continue;
       const midZ=(z1+z2)/2;
@@ -656,16 +730,8 @@ function build(){
     }
   }
 
-  // ── Find front wall and create door opening ──
-  let bestEdge=-1,bestLen=0,bestZ=-Infinity;
-  for(let i=0;i<fp.length;i++){
-    const a=fp[i],b=fp[(i+1)%fp.length];
-    const dx=b[0]-a[0],dz=b[1]-a[1];
-    const edgeLen=Math.sqrt(dx*dx+dz*dz);
-    const isHoriz=Math.abs(dx)>Math.abs(dz)*2;
-    const [nx,nz]=edgeNormal(a,b);
-    if(isHoriz&&nz>.5&&edgeLen>bestLen){bestLen=edgeLen;bestEdge=i;bestZ=(a[1]+b[1])/2}
-  }
+  // ── Door on stored front wall edge ──
+  const bestEdge=getDoorEdge(shapePoints);
 
   if(bestEdge>=0){
     const ea=fp[bestEdge],eb=fp[(bestEdge+1)%fp.length];
@@ -1073,7 +1139,11 @@ function buildShapeGrid(){
     btn.innerHTML=makeSvgThumb(name,pts)+`<div class="shape-btn-label">${name}</div>`;
     btn.addEventListener('click',()=>{
       S.shape=name;
-      shapePoints=JSON.parse(JSON.stringify(SHAPES[name]));
+      const p=SHAPE_PARAMS[name];
+      S.boxW=150;S.boxD=150; // reset to default size
+      S.notchW=p.nw;S.notchD=p.nd;
+      shapePoints=generateShapePoints(name,S.boxW,S.boxD,S.notchW,S.notchD);
+      storedDoorEdge=-1;
       document.querySelectorAll('.shape-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       drawFloorPlan();
@@ -1089,7 +1159,8 @@ function buildShapeGrid(){
 const fpCanvas=document.getElementById('floor-plan-canvas');
 const fpCtx=fpCanvas.getContext('2d');
 const FP_W=600,FP_H=600;
-let fpDragging=-1; // index of vertex being dragged
+let fpDragging=-1;
+let fpDragParam=null; // what parameter(s) this drag controls: {type:'boxW'|'boxD'|'notchW'|'notchD'|'combo', axis:'x'|'y'|'xy', sign:1|-1, anchor:[x,y]}
 
 function fpTransform(pts){
   // Compute bounding box of shape points (inches)
@@ -1209,19 +1280,7 @@ function drawFloorPlan(){
   }
 
   // ── Draw door position and swing arc ──
-  // Find the front wall (same logic as 3D build)
-  let fpBestEdge=-1,fpBestLen=0;
-  for(let i=0;i<pts.length;i++){
-    const a2=pts[i],b2=pts[(i+1)%pts.length];
-    const ddx=b2[0]-a2[0],ddz=b2[1]-a2[1];
-    const el=Math.sqrt(ddx*ddx+ddz*ddz);
-    const ih=Math.abs(ddx)>Math.abs(ddz)*2;
-    // Outward normal check
-    let nnx=ddz,nnz=-ddx;const nnl=Math.sqrt(nnx*nnx+nnz*nnz)||1;nnx/=nnl;nnz/=nnl;
-    const emx2=(a2[0]+b2[0])/2,emz2=(a2[1]+b2[1])/2;
-    if(nnx*(emx2-centX)+nnz*(emz2-centY)<0){nnx=-nnx;nnz=-nnz}
-    if(ih&&nnz>.5&&el>fpBestLen){fpBestLen=el;fpBestEdge=i}
-  }
+  const fpBestEdge=getDoorEdge(pts);
 
   if(fpBestEdge>=0){
     const ea=pts[fpBestEdge],eb=pts[(fpBestEdge+1)%pts.length];
@@ -1343,74 +1402,122 @@ fpCanvas.addEventListener('pointerdown',e=>{
     fpDragging=vi;
     fpCanvas.setPointerCapture(e.pointerId);
     fpCanvas.style.cursor='grabbing';
+
+    const pt=shapePoints[vi];
+    const onLeft=Math.abs(pt[0])<2;
+    const onRight=Math.abs(pt[0]-S.boxW)<2;
+    const onTop=Math.abs(pt[1])<2;
+    const onBottom=Math.abs(pt[1]-S.boxD)<2;
+    const notchPos=(SHAPE_PARAMS[S.shape]||{}).notch||'none';
+
+    if(S.shape==='Rectangle'){
+      fpDragParam={type:'box',dx:onRight?1:onLeft?-1:0,dy:onBottom?1:onTop?-1:0};
+    } else if((onLeft||onRight)&&(onTop||onBottom)){
+      // Outer bounding box corner
+      fpDragParam={type:'box',dx:onRight?1:onLeft?-1:0,dy:onBottom?1:onTop?-1:0};
+    } else if(!onLeft&&!onRight&&!onTop&&!onBottom){
+      // Interior notch corner — controls both notch dimensions
+      fpDragParam={type:'notchBoth',notchPos};
+    } else {
+      // Edge vertex (on one bbox edge but not corner) — notch edge vertex
+      // Determine which notch axis based on which edge it's on
+      if(onLeft||onRight){
+        fpDragParam={type:'notchD',notchPos,onSide:onLeft?'left':'right'};
+      } else {
+        fpDragParam={type:'notchW',notchPos,onSide:onTop?'top':'bottom'};
+      }
+    }
     drawFloorPlan();
   }
 });
 
 fpCanvas.addEventListener('pointermove',e=>{
   const [cx,cy]=fpGetMousePos(e);
-  if(fpDragging>=0){
+  if(fpDragging>=0&&fpDragParam){
     const tr=fpTransform(shapePoints);
     const [sx,sy]=tr.toShape(cx,cy);
-    const pts=shapePoints;
-    const vi=fpDragging;
-    const oldX=pts[vi][0],oldY=pts[vi][1];
-    // Snap to grid (6-inch increments)
-    let snapX=Math.round(sx/6)*6,snapY=Math.round(sy/6)*6;
+    const snapX=Math.round(sx/6)*6,snapY=Math.round(sy/6)*6;
+    const nr=NOTCH_RANGES[S.shape]||{nwMin:.15,nwMax:.50,ndMin:.15,ndMax:.50};
+    const notchPos=(SHAPE_PARAMS[S.shape]||{}).notch||'none';
 
-    // Rectilinear constraint: when moving a vertex, also move adjacent vertices
-    const n=pts.length;
-    const prevI=(vi-1+n)%n,nextI=(vi+1)%n;
-    const prev=pts[prevI],next=pts[nextI];
-
-    // Save old state for rollback
-    const backup=JSON.parse(JSON.stringify(pts));
-
-    if(Math.abs(prev[0]-oldX)<1){
-      pts[vi][0]=snapX;
-      prev[0]=snapX;
-    } else if(Math.abs(prev[1]-oldY)<1){
-      pts[vi][1]=snapY;
-      prev[1]=snapY;
+    // Compute door wall length at current notch to enforce 72" minimum
+    // For most shapes, door wall = boxW (full bottom edge)
+    // For shapes where notch is on the door side, door wall = boxW - notchW*boxW
+    function getDoorWallLen(w,d,nw,nd){
+      // Door is on the bottom edge (max Y). Check if notch removes from it.
+      if(notchPos==='bl'||notchPos==='br') return w - nw*w; // notch on bottom
+      if(notchPos==='bc') return w - nw*w; // center notch on bottom
+      return w; // notch is elsewhere, door wall = full width
     }
 
-    if(Math.abs(next[0]-oldX)<1){
-      pts[vi][0]=snapX;
-      next[0]=snapX;
-    } else if(Math.abs(next[1]-oldY)<1){
-      pts[vi][1]=snapY;
-      next[1]=snapY;
-    }
+    const maxBox=360;
 
-    if(pts[vi][0]===oldX&&pts[vi][1]===oldY){
-      pts[vi][0]=snapX;
-      pts[vi][1]=snapY;
-    }
-
-    // Validate: shape-specific min/max edge constraints
-    // Returns {min, max} for each edge based on current shape
-    function getEdgeConstraints(shapeType, edgeIdx, numEdges){
-      if(shapeType==='Rectangle'){
-        // All edges: min 72", max 360"
-        return {min:72, max:360};
+    if(fpDragParam.type==='box'){
+      if(fpDragParam.dx!==0){
+        let newW=fpDragParam.dx>0?snapX:S.boxW-snapX;
+        newW=Math.round(Math.max(72,Math.min(maxBox,newW))/6)*6;
+        // Check door wall stays >= 72"
+        const doorLen=getDoorWallLen(newW,S.boxD,S.notchW,S.notchD);
+        if(doorLen>=72) S.boxW=newW;
       }
-      // Default for cut-out shapes (will be customized per shape later)
-      return {min:24, max:360};
+      if(fpDragParam.dy!==0){
+        let newD=fpDragParam.dy>0?snapY:S.boxD-snapY;
+        newD=Math.round(Math.max(72,Math.min(maxBox,newD))/6)*6;
+        const doorLen=getDoorWallLen(S.boxW,newD,S.notchW,S.notchD);
+        if(doorLen>=72) S.boxD=newD;
+      }
+    } else if(fpDragParam.type==='notchW'||fpDragParam.type==='notchD'||fpDragParam.type==='notchBoth'){
+      // Map mouse position to notch fraction based on notch position
+      // The key: for each notch type, determine how snapX/snapY maps to nw/nd
+      let newNW=S.notchW, newND=S.notchD;
+
+      if(fpDragParam.type==='notchW'||fpDragParam.type==='notchBoth'){
+        // Notch width: which direction does increasing nw go?
+        if(notchPos==='tr'||notchPos==='br'||notchPos==='br-lg'||notchPos==='mr'){
+          // Notch on right side: nw increases as vertex moves LEFT (from W toward center)
+          newNW=(S.boxW-snapX)/S.boxW;
+        } else if(notchPos==='tl'||notchPos==='bl'||notchPos==='tl-lg'||notchPos==='ml'){
+          // Notch on left side: nw increases as vertex moves RIGHT (from 0 toward center)
+          newNW=snapX/S.boxW;
+        } else if(notchPos==='bc'){
+          // Center bottom: nw = total notch width as fraction, vertex at edge of notch
+          // Notch spans from (W-nw)/2 to (W+nw)/2, vertex is at one edge
+          newNW=Math.abs(snapX-S.boxW/2)*2/S.boxW;
+        }
+        newNW=Math.max(nr.nwMin,Math.min(nr.nwMax,newNW));
+      }
+
+      if(fpDragParam.type==='notchD'||fpDragParam.type==='notchBoth'){
+        // Notch depth: which direction does increasing nd go?
+        if(notchPos==='tl'||notchPos==='tl-lg'){
+          // Notch on top side: nd increases as vertex moves DOWN (from 0 toward center)
+          newND=snapY/S.boxD;
+        } else if(notchPos==='br'||notchPos==='bl'||notchPos==='bc'||notchPos==='tr'||notchPos==='br-lg'){
+          // Notch on bottom side or bottom-right: nd increases as vertex moves UP (from D toward center)
+          newND=(S.boxD-snapY)/S.boxD;
+        } else if(notchPos==='ml'){
+          // Left middle: nd = total notch height, vertex at edge
+          newND=Math.abs(snapY-S.boxD/2)*2/S.boxD;
+        } else if(notchPos==='mr'){
+          // Right middle: same
+          newND=Math.abs(snapY-S.boxD/2)*2/S.boxD;
+        }
+        newND=Math.max(nr.ndMin,Math.min(nr.ndMax,newND));
+      }
+
+      // Check door wall stays >= 72" with new notch
+      const doorLen=getDoorWallLen(S.boxW,S.boxD,newNW,newND);
+      if(doorLen>=72){
+        S.notchW=newNW;
+        S.notchD=newND;
+      }
     }
 
-    let valid=true;
-    for(let j=0;j<pts.length;j++){
-      const a=pts[j],b=pts[(j+1)%pts.length];
-      const edx=b[0]-a[0],edz=b[1]-a[1];
-      const el=Math.sqrt(edx*edx+edz*edz);
-      const c=getEdgeConstraints(S.shape,j,pts.length);
-      if(el<c.min||el>c.max){ valid=false; break; }
-    }
+    // Final clamp
+    if(S.boxW<72)S.boxW=72;if(S.boxW>maxBox)S.boxW=maxBox;
+    if(S.boxD<72)S.boxD=72;if(S.boxD>maxBox)S.boxD=maxBox;
 
-    // If invalid, rollback
-    if(!valid){
-      for(let j=0;j<pts.length;j++){pts[j][0]=backup[j][0];pts[j][1]=backup[j][1]}
-    }
+    shapePoints=generateShapePoints(S.shape,S.boxW,S.boxD,S.notchW,S.notchD);
 
     drawFloorPlan();
     build();
@@ -1424,6 +1531,7 @@ fpCanvas.addEventListener('pointermove',e=>{
 fpCanvas.addEventListener('pointerup',e=>{
   if(fpDragging>=0){
     fpDragging=-1;
+    fpDragParam=null;
     fpCanvas.style.cursor='crosshair';
     fpCanvas.releasePointerCapture(e.pointerId);
     drawFloorPlan();
@@ -1441,9 +1549,9 @@ build();updateMat();updateSliders();
 // Undo/Redo (must be before UI bindings)
 // ═══════════════════════════════════════════════════════
 const undoStack=[],redoStack=[];
-const stateKeys=['type','temperature','finish','finishColor','shape','height','wallT','doorWidth','doorOffset','doorSwing','floor','ramp','wireframe','showDims'];
-function captureState(){const snap={};stateKeys.forEach(k=>snap[k]=S[k]);snap._pts=JSON.stringify(shapePoints);return JSON.stringify(snap)}
-function restoreState(json){const snap=JSON.parse(json);stateKeys.forEach(k=>{if(snap[k]!==undefined)S[k]=snap[k]});if(snap._pts)shapePoints=JSON.parse(snap._pts);
+const stateKeys=['type','temperature','finish','finishColor','shape','height','wallT','boxW','boxD','notchW','notchD','doorWidth','doorOffset','doorSwing','floor','ramp','wireframe','showDims','texScale','texRotation','texFit','texRepeatX','texRepeatY','texGap'];
+function captureState(){const snap={};stateKeys.forEach(k=>snap[k]=S[k]);snap._pts=JSON.stringify(shapePoints);snap._doorEdge=storedDoorEdge;return JSON.stringify(snap)}
+function restoreState(json){const snap=JSON.parse(json);stateKeys.forEach(k=>{if(snap[k]!==undefined)S[k]=snap[k]});if(snap._pts)shapePoints=JSON.parse(snap._pts);if(snap._doorEdge!==undefined)storedDoorEdge=snap._doorEdge;
   document.getElementById('slider-height').value=S.height;document.getElementById('custom-color').value=S.finishColor;
   document.getElementById('floor-select').value=S.floor;document.getElementById('toggle-wireframe').checked=S.wireframe;
   document.getElementById('toggle-dims').checked=S.showDims;
