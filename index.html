@@ -235,7 +235,7 @@
   class OC extends THREE.EventDispatcher{
     constructor(o,d){
       super();this.object=o;this.dom=d;this.enabled=true;this.target=new THREE.Vector3();
-      this.minDist=3;this.maxDist=50;this.enableDamping=true;this.dampFactor=.1;
+      this.minDist=3;this.maxDist=120;this.enableDamping=true;this.dampFactor=.1;
       this.rotSpeed=.7;this.zoomSpeed=1;this.panSpeed=.7;this.minPolar=.1;this.maxPolar=Math.PI/2+.3;
       const sc=this,sph=new THREE.Spherical(),sphD=new THREE.Spherical(),panOff=new THREE.Vector3();
       let scale=1,state=ST.NONE,ps=new THREE.Vector2(),pe=new THREE.Vector2();
@@ -307,12 +307,12 @@ container.insertBefore(renderer.domElement,container.firstChild);
 function resize(){const w=container.clientWidth,h=container.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix()}
 resize();window.addEventListener('resize',resize);
 scene.add(new THREE.AmbientLight(0xffffff,.5));
-const dL=new THREE.DirectionalLight(0xffffff,.85);dL.position.set(10,18,12);dL.castShadow=true;dL.shadow.mapSize.set(2048,2048);dL.shadow.camera.near=.5;dL.shadow.camera.far=50;dL.shadow.camera.left=-20;dL.shadow.camera.right=20;dL.shadow.camera.top=20;dL.shadow.camera.bottom=-20;dL.shadow.bias=-.001;scene.add(dL);
+const dL=new THREE.DirectionalLight(0xffffff,.85);dL.position.set(10,18,12);dL.castShadow=true;dL.shadow.mapSize.set(2048,2048);dL.shadow.camera.near=.5;dL.shadow.camera.far=150;dL.shadow.camera.left=-60;dL.shadow.camera.right=60;dL.shadow.camera.top=60;dL.shadow.camera.bottom=-60;dL.shadow.bias=-.001;scene.add(dL);
 scene.add(new THREE.DirectionalLight(0xadd8e6,.2).translateX(-8).translateY(6).translateZ(-6));
 scene.add(new THREE.HemisphereLight(0xffffff,0xb0b8c4,.2));
-const gnd=new THREE.Mesh(new THREE.PlaneGeometry(60,60),new THREE.MeshStandardMaterial({color:0xcdd2d9,roughness:.95}));gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;scene.add(gnd);
-const gr=new THREE.GridHelper(60,60,0xb0b8c4,0xc0c8d0);gr.position.y=.005;gr.material.transparent=true;gr.material.opacity=.25;scene.add(gr);
-const ctrl=new THREE.OrbitControls(camera,renderer.domElement);ctrl.target.set(0,3.5,0);ctrl.enableDamping=true;ctrl.minDist=5;ctrl.maxDist=40;ctrl.update();
+const gnd=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:0xcdd2d9,roughness:.95}));gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;scene.add(gnd);
+const gr=new THREE.GridHelper(200,200,0xb0b8c4,0xc0c8d0);gr.position.y=.005;gr.material.transparent=true;gr.material.opacity=.25;scene.add(gr);
+const ctrl=new THREE.OrbitControls(camera,renderer.domElement);ctrl.target.set(0,3.5,0);ctrl.enableDamping=true;ctrl.minDist=5;ctrl.maxDist=120;ctrl.update();
 
 // ═══════════════════════════════════════════════════════
 // 3D helpers
@@ -1387,13 +1387,24 @@ fpCanvas.addEventListener('pointermove',e=>{
       pts[vi][1]=snapY;
     }
 
-    // Validate: no edge should collapse to less than 24"
+    // Validate: shape-specific min/max edge constraints
+    // Returns {min, max} for each edge based on current shape
+    function getEdgeConstraints(shapeType, edgeIdx, numEdges){
+      if(shapeType==='Rectangle'){
+        // All edges: min 72", max 360"
+        return {min:72, max:360};
+      }
+      // Default for cut-out shapes (will be customized per shape later)
+      return {min:24, max:360};
+    }
+
     let valid=true;
     for(let j=0;j<pts.length;j++){
       const a=pts[j],b=pts[(j+1)%pts.length];
       const edx=b[0]-a[0],edz=b[1]-a[1];
       const el=Math.sqrt(edx*edx+edz*edz);
-      if(el<24&&el>1){ valid=false; break; }
+      const c=getEdgeConstraints(S.shape,j,pts.length);
+      if(el<c.min||el>c.max){ valid=false; break; }
     }
 
     // If invalid, rollback
