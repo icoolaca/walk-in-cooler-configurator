@@ -113,6 +113,9 @@
   .tool-divider{width:28px;height:1px;background:var(--border);margin:4px 0}
   .import-status{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(15,23,42,.9);color:#fff;font-family:'Outfit',sans-serif;font-size:12px;font-weight:500;padding:8px 18px;border-radius:8px;display:none;white-space:nowrap;pointer-events:none}
   .import-status.active{display:block}
+  .transform-btn.active-move{background:rgba(239,68,68,.15);color:#ef4444}
+  .transform-btn.active-scale{background:rgba(34,197,94,.15);color:#22c55e}
+  .transform-btn.active-rotate{background:rgba(59,130,246,.15);color:#3b82f6}
   /* Tablet: ≤1024px */
   @media(max-width:1024px){
     .right-panel{width:320px}
@@ -184,6 +187,10 @@
     <button class="tool-btn" title="Save Screenshot" id="btn-screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
     <button class="tool-btn" title="Import 3D Object (.glb / .obj)" id="btn-import-3d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></button>
     <input type="file" id="import-3d-file" accept=".glb,.gltf,.obj" style="display:none">
+    <!-- Transform mode buttons (visible when object selected) -->
+    <button class="tool-btn transform-btn" title="Move (W)" id="btn-mode-move" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg></button>
+    <button class="tool-btn transform-btn" title="Scale (E)" id="btn-mode-scale" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+    <button class="tool-btn transform-btn" title="Rotate (R)" id="btn-mode-rotate" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6"/><path d="M21.34 15.57a10 10 0 1 1-.57-8.38L21.5 8"/></svg></button>
   </div>
   <div class="canvas-area" id="canvas-area">
     <canvas id="axis-gizmo" width="120" height="120" style="position:absolute;top:12px;left:12px;z-index:3;pointer-events:none;width:5rem!important;height:5rem!important;"></canvas>
@@ -279,41 +286,111 @@
 </footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// Minimal OBJLoader for Three.js r128
-THREE.OBJLoader=function(manager){this.manager=manager||THREE.DefaultLoadingManager};
-THREE.OBJLoader.prototype={constructor:THREE.OBJLoader,load:function(url,onLoad,onProgress,onError){
-  const scope=this;const loader=new THREE.FileLoader(this.manager);loader.setPath(this.path||'');
-  loader.load(url,function(text){try{onLoad(scope.parse(text))}catch(e){if(onError)onError(e);else console.error(e)}},onProgress,onError);
-},setPath:function(v){this.path=v;return this},
-parse:function(text){
-  const lines=text.split('\n');const vertices=[],normals=[],uvs=[];
-  const geo=new THREE.BufferGeometry();const vArr=[],nArr=[],uArr=[];
-  for(let i=0;i<lines.length;i++){
-    const line=lines[i].trim();if(!line||line[0]==='#')continue;
-    const parts=line.split(/\s+/);const key=parts[0];
-    if(key==='v')vertices.push(parseFloat(parts[1]),parseFloat(parts[2]),parseFloat(parts[3]));
-    else if(key==='vn')normals.push(parseFloat(parts[1]),parseFloat(parts[2]),parseFloat(parts[3]));
-    else if(key==='vt')uvs.push(parseFloat(parts[1]),parseFloat(parts[2]));
-    else if(key==='f'){
-      const face=[];for(let j=1;j<parts.length;j++){
-        const idx=parts[j].split('/');
-        const vi=(parseInt(idx[0])-1)*3;
-        vArr.push(vertices[vi],vertices[vi+1],vertices[vi+2]);
-        if(idx[1]&&uvs.length){const ui=(parseInt(idx[1])-1)*2;uArr.push(uvs[ui],uvs[ui+1])}
-        if(idx[2]&&normals.length){const ni=(parseInt(idx[2])-1)*3;nArr.push(normals[ni],normals[ni+1],normals[ni+2])}
-        face.push(vArr.length/3-1);
+// Full OBJLoader for Three.js r128
+(function(){
+  function OBJLoader(manager){this.manager=manager||THREE.DefaultLoadingManager;this.materials=null}
+  OBJLoader.prototype={
+    constructor:OBJLoader,
+    load:function(url,onLoad,onProg,onErr){
+      const s=this,l=new THREE.FileLoader(this.manager);
+      l.setPath(this.path||'');
+      l.load(url,function(t){try{onLoad(s.parse(t))}catch(e){if(onErr)onErr(e);else console.error(e)}},onProg,onErr);
+    },
+    setPath:function(p){this.path=p;return this},
+    setMaterials:function(m){this.materials=m;return this},
+    parse:function(text){
+      const group=new THREE.Group();
+      let positions=[],normals=[],uvs=[];
+      let curVerts=[],curNorms=[],curUVs=[];
+      let curName='default';
+
+      function flush(){
+        if(curVerts.length===0)return;
+        const geo=new THREE.BufferGeometry();
+        geo.setAttribute('position',new THREE.Float32BufferAttribute(curVerts,3));
+        if(curNorms.length===curVerts.length)
+          geo.setAttribute('normal',new THREE.Float32BufferAttribute(curNorms,3));
+        else geo.computeVertexNormals();
+        if(curUVs.length>0)
+          geo.setAttribute('uv',new THREE.Float32BufferAttribute(curUVs,2));
+        const mat=new THREE.MeshStandardMaterial({color:0xaaaaaa,roughness:.5,metalness:.2,side:THREE.DoubleSide});
+        const mesh=new THREE.Mesh(geo,mat);
+        mesh.name=curName;
+        group.add(mesh);
+        curVerts=[];curNorms=[];curUVs=[];
       }
-      for(let j=1;j<face.length-1;j++){/* triangulate */}
+
+      function addFaceVertex(spec){
+        const parts=spec.split('/');
+        let vi=parseInt(parts[0]);
+        if(isNaN(vi))return;
+        // Handle negative indices (relative to end)
+        if(vi<0)vi=positions.length/3+vi+1;
+        const pi=(vi-1)*3;
+        curVerts.push(positions[pi]||0,positions[pi+1]||0,positions[pi+2]||0);
+        // UV
+        if(parts.length>1&&parts[1]!==''){
+          let ti=parseInt(parts[1]);
+          if(ti<0)ti=uvs.length/2+ti+1;
+          const ui=(ti-1)*2;
+          curUVs.push(uvs[ui]||0,uvs[ui+1]||0);
+        }
+        // Normal
+        if(parts.length>2&&parts[2]!==''){
+          let ni=parseInt(parts[2]);
+          if(ni<0)ni=normals.length/3+ni+1;
+          const nni=(ni-1)*3;
+          curNorms.push(normals[nni]||0,normals[nni+1]||0,normals[nni+2]||0);
+        }
+      }
+
+      const lines=text.split('\n');
+      for(let i=0;i<lines.length;i++){
+        const line=lines[i].trim();
+        if(!line||line[0]==='#')continue;
+        const parts=line.split(/\s+/);
+        const key=parts[0];
+
+        if(key==='v'){
+          positions.push(parseFloat(parts[1])||0,parseFloat(parts[2])||0,parseFloat(parts[3])||0);
+        } else if(key==='vn'){
+          normals.push(parseFloat(parts[1])||0,parseFloat(parts[2])||0,parseFloat(parts[3])||0);
+        } else if(key==='vt'){
+          uvs.push(parseFloat(parts[1])||0,parseFloat(parts[2])||0);
+        } else if(key==='f'){
+          // Triangulate fan: for n vertices, create n-2 triangles
+          const faceVerts=[];
+          for(let j=1;j<parts.length;j++){
+            if(parts[j]==='')continue;
+            faceVerts.push(parts[j]);
+          }
+          // Fan triangulation: vertex 0 connects to all pairs
+          for(let j=1;j<faceVerts.length-1;j++){
+            addFaceVertex(faceVerts[0]);
+            addFaceVertex(faceVerts[j]);
+            addFaceVertex(faceVerts[j+1]);
+          }
+        } else if(key==='o'||key==='g'){
+          flush();
+          curName=parts.slice(1).join(' ')||'object';
+        } else if(key==='usemtl'){
+          flush();
+          curName=parts[1]||'material';
+        }
+      }
+      flush();
+
+      if(group.children.length===0){
+        // Fallback: empty file, add placeholder
+        const g=new THREE.BoxGeometry(1,1,1);
+        const m=new THREE.MeshStandardMaterial({color:0xcccccc});
+        group.add(new THREE.Mesh(g,m));
+      }
+      return group;
     }
-  }
-  geo.setAttribute('position',new THREE.Float32BufferAttribute(vArr,3));
-  if(nArr.length)geo.setAttribute('normal',new THREE.Float32BufferAttribute(nArr,3));
-  else geo.computeVertexNormals();
-  if(uArr.length)geo.setAttribute('uv',new THREE.Float32BufferAttribute(uArr,2));
-  const mat=new THREE.MeshStandardMaterial({color:0xaaaaaa,roughness:.5,metalness:.2});
-  const mesh=new THREE.Mesh(geo,mat);
-  const group=new THREE.Group();group.add(mesh);return group;
-}};
+  };
+  THREE.OBJLoader=OBJLoader;
+})();
 </script>
 <script>
 // ═══════════════════════════════════════════════════════
@@ -1975,25 +2052,153 @@ function cancelPlacement(){
 function selectObject(obj){
   deselectObject();
   selectedObject=obj;
-  // Add bounding box wireframe
-  const box=new THREE.Box3().setFromObject(obj);
-  const helper=new THREE.Box3Helper(box,0x0891b2);
-  scene.add(helper);
-  selectionBox=helper;
+  updateSelectionBox();
+  showTransformButtons(true);
+  setTransformMode('move'); // default to move
+  createGizmo();
 }
 
 function deselectObject(){
   if(selectionBox){scene.remove(selectionBox);selectionBox=null}
+  removeGizmo();
+  showTransformButtons(false);
   selectedObject=null;
+  transformMode='move';
 }
 
 function updateSelectionBox(){
-  if(!selectedObject||!selectionBox)return;
-  scene.remove(selectionBox);
+  if(selectionBox){scene.remove(selectionBox);selectionBox=null}
+  if(!selectedObject)return;
   const box=new THREE.Box3().setFromObject(selectedObject);
   const helper=new THREE.Box3Helper(box,0x0891b2);
   scene.add(helper);
   selectionBox=helper;
+}
+
+// Transform mode system
+let transformMode='move'; // 'move','scale','rotate'
+const gizmoGroup=new THREE.Group();
+scene.add(gizmoGroup);
+const gizmoHandles=[]; // {mesh, axis:'x'|'y'|'z', type:'move'|'scale'|'rotate'}
+let activeAxis=null;
+let dragStart=null;
+let dragObjStart=null;
+
+function showTransformButtons(show){
+  document.querySelectorAll('.transform-btn').forEach(b=>b.style.display=show?'':'none');
+}
+
+function setTransformMode(mode){
+  transformMode=mode;
+  document.querySelectorAll('.transform-btn').forEach(b=>{
+    b.classList.remove('active-move','active-scale','active-rotate');
+  });
+  const btn=document.getElementById('btn-mode-'+mode);
+  if(btn)btn.classList.add('active-'+mode);
+  if(selectedObject)createGizmo();
+}
+
+document.getElementById('btn-mode-move').addEventListener('click',()=>setTransformMode('move'));
+document.getElementById('btn-mode-scale').addEventListener('click',()=>setTransformMode('scale'));
+document.getElementById('btn-mode-rotate').addEventListener('click',()=>setTransformMode('rotate'));
+
+function removeGizmo(){
+  while(gizmoGroup.children.length){
+    const c=gizmoGroup.children[0];
+    if(c.geometry)c.geometry.dispose();
+    if(c.material)c.material.dispose();
+    gizmoGroup.remove(c);
+  }
+  gizmoHandles.length=0;
+}
+
+function createGizmo(){
+  removeGizmo();
+  if(!selectedObject)return;
+  const pos=selectedObject.position;
+  const box=new THREE.Box3().setFromObject(selectedObject);
+  const size=new THREE.Vector3();box.getSize(size);
+  const gLen=Math.max(size.x,size.y,size.z)*0.8+0.5;
+
+  const axes=[
+    {axis:'x',color:0xef4444,dir:new THREE.Vector3(1,0,0)},
+    {axis:'y',color:0x22c55e,dir:new THREE.Vector3(0,1,0)},
+    {axis:'z',color:0x3b82f6,dir:new THREE.Vector3(0,0,1)}
+  ];
+
+  if(transformMode==='move'){
+    // Arrow shafts + cones for each axis
+    axes.forEach(a=>{
+      const mat=new THREE.MeshBasicMaterial({color:a.color,depthTest:false,transparent:true,opacity:.85});
+      // Shaft
+      const shaft=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,gLen,6),mat);
+      shaft.position.copy(pos).add(a.dir.clone().multiplyScalar(gLen/2));
+      if(a.axis==='x')shaft.rotation.z=-Math.PI/2;
+      if(a.axis==='z')shaft.rotation.x=Math.PI/2;
+      shaft.renderOrder=999;
+      gizmoGroup.add(shaft);
+      // Cone (arrow head)
+      const cone=new THREE.Mesh(new THREE.ConeGeometry(.08,.25,8),mat);
+      cone.position.copy(pos).add(a.dir.clone().multiplyScalar(gLen+.12));
+      if(a.axis==='x')cone.rotation.z=-Math.PI/2;
+      if(a.axis==='z')cone.rotation.x=Math.PI/2;
+      cone.renderOrder=999;
+      gizmoGroup.add(cone);
+      // Invisible larger hit area
+      const hitMat=new THREE.MeshBasicMaterial({visible:false});
+      const hitGeo=new THREE.CylinderGeometry(.1,.1,gLen+.3,6);
+      const hit=new THREE.Mesh(hitGeo,hitMat);
+      hit.position.copy(pos).add(a.dir.clone().multiplyScalar(gLen/2));
+      if(a.axis==='x')hit.rotation.z=-Math.PI/2;
+      if(a.axis==='z')hit.rotation.x=Math.PI/2;
+      hit.userData={gizmoHandle:true,axis:a.axis,type:'move'};
+      gizmoGroup.add(hit);
+      gizmoHandles.push(hit);
+    });
+  } else if(transformMode==='scale'){
+    // Lines with cubes at ends
+    axes.forEach(a=>{
+      const mat=new THREE.MeshBasicMaterial({color:a.color,depthTest:false,transparent:true,opacity:.85});
+      const shaft=new THREE.Mesh(new THREE.CylinderGeometry(.015,.015,gLen,6),mat);
+      shaft.position.copy(pos).add(a.dir.clone().multiplyScalar(gLen/2));
+      if(a.axis==='x')shaft.rotation.z=-Math.PI/2;
+      if(a.axis==='z')shaft.rotation.x=Math.PI/2;
+      shaft.renderOrder=999;
+      gizmoGroup.add(shaft);
+      const cube=new THREE.Mesh(new THREE.BoxGeometry(.12,.12,.12),mat);
+      cube.position.copy(pos).add(a.dir.clone().multiplyScalar(gLen+.06));
+      cube.renderOrder=999;
+      gizmoGroup.add(cube);
+      // Hit area
+      const hit=new THREE.Mesh(new THREE.CylinderGeometry(.1,.1,gLen+.2,6),new THREE.MeshBasicMaterial({visible:false}));
+      hit.position.copy(pos).add(a.dir.clone().multiplyScalar(gLen/2));
+      if(a.axis==='x')hit.rotation.z=-Math.PI/2;
+      if(a.axis==='z')hit.rotation.x=Math.PI/2;
+      hit.userData={gizmoHandle:true,axis:a.axis,type:'scale'};
+      gizmoGroup.add(hit);
+      gizmoHandles.push(hit);
+    });
+  } else if(transformMode==='rotate'){
+    // Torus rings for each axis
+    axes.forEach(a=>{
+      const mat=new THREE.MeshBasicMaterial({color:a.color,depthTest:false,transparent:true,opacity:.7,side:THREE.DoubleSide});
+      const torus=new THREE.Mesh(new THREE.TorusGeometry(gLen*.7,.025,8,48),mat);
+      torus.position.copy(pos);
+      if(a.axis==='x')torus.rotation.y=Math.PI/2;
+      if(a.axis==='z'){} // default orientation is XY plane = rotate around Z
+      if(a.axis==='y')torus.rotation.x=Math.PI/2;
+      torus.renderOrder=999;
+      gizmoGroup.add(torus);
+      // Hit area (fatter torus)
+      const hit=new THREE.Mesh(new THREE.TorusGeometry(gLen*.7,.1,8,48),new THREE.MeshBasicMaterial({visible:false}));
+      hit.position.copy(pos);
+      if(a.axis==='x')hit.rotation.y=Math.PI/2;
+      if(a.axis==='y')hit.rotation.x=Math.PI/2;
+      hit.userData={gizmoHandle:true,axis:a.axis,type:'rotate'};
+      gizmoGroup.add(hit);
+      gizmoHandles.push(hit);
+    });
+  }
 }
 
 function getGroundPoint(e){
@@ -2006,88 +2211,147 @@ function getGroundPoint(e){
   return pt;
 }
 
-// Mouse handlers for placement and dragging
+// Get point on axis plane for precise axis-constrained dragging
+function getAxisPoint(e,axis,origin){
+  const rect=renderer.domElement.getBoundingClientRect();
+  importMouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+  importMouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  importRay.setFromCamera(importMouse,camera);
+  // Create a plane that contains the axis and faces the camera
+  const camDir=new THREE.Vector3();camera.getWorldDirection(camDir);
+  const axisDir=axis==='x'?new THREE.Vector3(1,0,0):axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+  let planeNormal=new THREE.Vector3().crossVectors(axisDir,camDir).cross(axisDir).normalize();
+  if(planeNormal.length()<.01)planeNormal=camDir.clone();
+  const plane=new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal,origin);
+  const pt=new THREE.Vector3();
+  importRay.ray.intersectPlane(plane,pt);
+  return pt;
+}
+
+// Mouse handlers for placement and transform
 renderer.domElement.addEventListener('pointerdown',e=>{
   if(placementObject){
-    // Placing mode: click to place
     finishPlacement();
     return;
   }
 
-  // Check if clicking on an imported object
   const rect=renderer.domElement.getBoundingClientRect();
   importMouse.x=((e.clientX-rect.left)/rect.width)*2-1;
   importMouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
   importRay.setFromCamera(importMouse,camera);
 
-  // Collect all imported meshes
+  // Check gizmo handles first
+  if(selectedObject&&gizmoHandles.length>0){
+    const gHits=importRay.intersectObjects(gizmoHandles,false);
+    if(gHits.length>0){
+      const handle=gHits[0].object;
+      activeAxis=handle.userData.axis;
+      const pt=getAxisPoint(e,activeAxis,selectedObject.position);
+      dragStart=pt.clone();
+      dragObjStart={
+        pos:selectedObject.position.clone(),
+        scale:selectedObject.scale.clone(),
+        rot:selectedObject.rotation.clone()
+      };
+      isDraggingObject=true;
+      ctrl.enabled=false;
+      e.stopPropagation();
+      return;
+    }
+  }
+
+  // Check imported objects
   const importedMeshes=[];
   importedObjects.forEach(obj=>{obj.traverse(c=>{if(c.isMesh)importedMeshes.push(c)})});
-
   if(importedMeshes.length>0){
     const hits=importRay.intersectObjects(importedMeshes,false);
     if(hits.length>0){
-      // Find the parent imported object
       let hitObj=hits[0].object;
       while(hitObj.parent&&!hitObj.userData.isImported)hitObj=hitObj.parent;
       if(hitObj.userData.isImported){
         selectObject(hitObj);
-        isDraggingObject=true;
-        ctrl.enabled=false;
         e.stopPropagation();
         return;
       }
     }
   }
 
-  // Clicked on nothing — deselect
-  if(selectedObject&&!isDraggingObject)deselectObject();
+  if(selectedObject)deselectObject();
 });
 
 renderer.domElement.addEventListener('pointermove',e=>{
-  const pt=getGroundPoint(e);
-  if(!pt)return;
-
   if(placementObject){
-    // Follow mouse on ground plane
-    placementObject.position.set(pt.x,0,pt.z);
+    const pt=getGroundPoint(e);
+    if(pt)placementObject.position.set(pt.x,0,pt.z);
     return;
   }
 
-  if(isDraggingObject&&selectedObject){
-    selectedObject.position.set(pt.x,0,pt.z);
+  if(isDraggingObject&&selectedObject&&activeAxis&&dragStart){
+    const pt=getAxisPoint(e,activeAxis,dragObjStart.pos);
+    if(!pt)return;
+    const delta=pt.clone().sub(dragStart);
+
+    if(transformMode==='move'){
+      const axisMask=activeAxis==='x'?new THREE.Vector3(1,0,0):activeAxis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+      const movement=axisMask.clone().multiplyScalar(delta.dot(axisMask));
+      selectedObject.position.copy(dragObjStart.pos).add(movement);
+    } else if(transformMode==='scale'){
+      const axisMask=activeAxis==='x'?new THREE.Vector3(1,0,0):activeAxis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+      const dist=delta.dot(axisMask);
+      const factor=1+dist*0.5;
+      const clamped=Math.max(0.1,Math.min(10,factor));
+      if(e.shiftKey){
+        // Uniform scale
+        selectedObject.scale.copy(dragObjStart.scale).multiplyScalar(clamped);
+      } else {
+        // Per-axis scale
+        selectedObject.scale.copy(dragObjStart.scale);
+        if(activeAxis==='x')selectedObject.scale.x=dragObjStart.scale.x*clamped;
+        if(activeAxis==='y')selectedObject.scale.y=dragObjStart.scale.y*clamped;
+        if(activeAxis==='z')selectedObject.scale.z=dragObjStart.scale.z*clamped;
+      }
+    } else if(transformMode==='rotate'){
+      const axisMask=activeAxis==='x'?new THREE.Vector3(1,0,0):activeAxis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+      // Perpendicular component gives rotation amount
+      const perp=new THREE.Vector3().crossVectors(axisMask,delta);
+      const angle=perp.length()*2;
+      const sign=perp.dot(camera.position.clone().sub(selectedObject.position))>0?1:-1;
+      selectedObject.rotation.copy(dragObjStart.rot);
+      if(activeAxis==='x')selectedObject.rotation.x=dragObjStart.rot.x+angle*sign;
+      if(activeAxis==='y')selectedObject.rotation.y=dragObjStart.rot.y+angle*sign;
+      if(activeAxis==='z')selectedObject.rotation.z=dragObjStart.rot.z+angle*sign;
+    }
     updateSelectionBox();
+    createGizmo();
   }
 });
 
 renderer.domElement.addEventListener('pointerup',e=>{
   if(isDraggingObject){
     isDraggingObject=false;
+    activeAxis=null;
+    dragStart=null;
+    dragObjStart=null;
     ctrl.enabled=true;
     updateSelectionBox();
+    if(selectedObject)createGizmo();
   }
 });
 
-// Scroll to resize during placement or when object selected
+// Scroll to resize during placement
 renderer.domElement.addEventListener('wheel',e=>{
-  const target=placementObject||selectedObject;
-  if(!target)return;
-  if(!placementObject&&!selectedObject)return;
-  // Only intercept if we have something to scale
-  if(placementObject||(selectedObject&&e.shiftKey)){
+  if(placementObject){
     e.preventDefault();e.stopPropagation();
     const factor=e.deltaY>0?0.95:1.05;
-    target.scale.multiplyScalar(factor);
-    // Clamp scale
-    const bs=target.userData.baseScale;
+    placementObject.scale.multiplyScalar(factor);
+    const bs=placementObject.userData.baseScale;
     const maxS=bs.x*10,minS=bs.x*0.1;
-    if(target.scale.x>maxS)target.scale.set(maxS,maxS,maxS);
-    if(target.scale.x<minS)target.scale.set(minS,minS,minS);
-    if(selectedObject)updateSelectionBox();
+    if(placementObject.scale.x>maxS)placementObject.scale.set(maxS,maxS,maxS);
+    if(placementObject.scale.x<minS)placementObject.scale.set(minS,minS,minS);
   }
 },{passive:false});
 
-// ESC to cancel placement or deselect
+// Keyboard: ESC, Delete, W/E/R for transform modes
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(placementObject)cancelPlacement();
@@ -2100,6 +2364,11 @@ document.addEventListener('keydown',e=>{
       scene.remove(selectedObject);
       deselectObject();
     }
+  }
+  if(selectedObject){
+    if(e.key==='w'||e.key==='W')setTransformMode('move');
+    if(e.key==='e'||e.key==='E')setTransformMode('scale');
+    if(e.key==='r'||e.key==='R')setTransformMode('rotate');
   }
 });
 
